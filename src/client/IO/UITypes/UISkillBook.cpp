@@ -60,6 +60,13 @@ namespace jrc
         private:
             int32_t skill_id;
         };
+
+        // Skill ids embed the sub-job that owns them in their upper digits, and
+        // the server classifies a sub-job ending in 2 as a fourth job book.
+        bool is_fourth_job_skill(int32_t skill_id)
+        {
+            return (skill_id / 10000) % 10 == 2;
+        }
     }
 
     constexpr Point<int16_t> UISkillbook::SKILL_OFFSET;
@@ -288,8 +295,7 @@ namespace jrc
         case BT_SPUP1:
         case BT_SPUP2:
         case BT_SPUP3:
-            send_spup(id - BT_SPUP0 + offset);
-            return Button::PRESSED;
+            return send_spup(id - BT_SPUP0 + offset);
         default:
             return Button::PRESSED;
         }
@@ -430,7 +436,11 @@ namespace jrc
 
     void UISkillbook::update_skills(int32_t skill_id)
     {
-        if (skill_id / 10000 == job.get_id())
+        // The book lists every sub-job of the current job tree, so comparing the
+        // skill's owning sub-job against the exact current job id would ignore
+        // updates for earlier advancements: a Fighter (110) raising a Swordsman
+        // skill (100xxxx) never refreshed, leaving a stale level on screen.
+        if (job.can_use(skill_id))
         {
             change_tab(tab, true);
         }
@@ -579,7 +589,10 @@ namespace jrc
 
         int32_t level = skillbook.get_level(skill_id);
         int32_t masterlevel = skillbook.get_masterlevel(skill_id);
-        if (masterlevel == 0)
+        // Fourth job skills are capped by the master level unlocked through
+        // mastery books, so one that was never booked cannot be raised at all.
+        // Every other skill is capped by the maximum declared in the skill data.
+        if (masterlevel == 0 && !is_fourth_job_skill(skill_id))
         {
             masterlevel = SkillData::get(skill_id).get_masterlevel();
         }
@@ -598,17 +611,26 @@ namespace jrc
         }
     }
 
-    void UISkillbook::send_spup(uint16_t row)
+    Button::State UISkillbook::send_spup(uint16_t row)
     {
         if (row >= icons.size())
         {
-            return;
+            return Button::DISABLED;
         }
 
         int32_t skill_id = icons[row].get_id();
+        // The server drops raise requests for maxed skills without answering,
+        // so sending one anyway would leave the ui disabled forever waiting on
+        // a reply. Keeping the button disabled also preserves its grey sprite.
+        if (!can_raise(skill_id))
+        {
+            return Button::DISABLED;
+        }
 
         SpendSpPacket(skill_id).dispatch();
         UI::get().disable();
+
+        return Button::PRESSED;
     }
 
     Job::Level UISkillbook::joblevel_by_tab(uint16_t t) const

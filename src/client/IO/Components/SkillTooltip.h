@@ -37,6 +37,9 @@ namespace jrc
 
     private:
         int32_t skill_id;
+        int32_t skill_level;
+        int32_t skill_masterlevel;
+        int64_t skill_expiration;
         int16_t height;
         int16_t icon_offset;
         int16_t level_offset;

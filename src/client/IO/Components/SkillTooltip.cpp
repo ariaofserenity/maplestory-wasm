@@ -34,15 +34,32 @@ namespace jrc
         cover = itemtt["ItemIcon"]["cover"];
 
         skill_id = 0;
+        skill_level = 0;
+        skill_masterlevel = 0;
+        skill_expiration = 0;
     }
 
     void SkillTooltip::set_skill(int32_t id, int32_t level,
         int32_t mlevel, int64_t expiration) {
 
-        if (skill_id == id)
+        // Building the tooltip re-lays out several blocks of text, which is far
+        // too expensive to repeat for every frame the cursor rests on a skill.
+        // The cache has to key on the whole entry and not just the id: raising a
+        // skill leaves the cursor on the icon it was raised from, so keying on
+        // the id alone kept showing the level from before the point was spent
+        // until some other skill was hovered in between.
+        if (skill_id == id
+            && skill_level == level
+            && skill_masterlevel == mlevel
+            && skill_expiration == expiration)
+        {
             return;
+        }
 
         skill_id = id;
+        skill_level = level;
+        skill_masterlevel = mlevel;
+        skill_expiration = expiration;
 
         if (skill_id == 0)
             return;

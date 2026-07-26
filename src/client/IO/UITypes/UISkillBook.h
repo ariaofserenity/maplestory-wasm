@@ -97,7 +97,7 @@ namespace jrc
         void clear_tooltip();
 
         bool can_raise(int32_t skill_id) const;
-        void send_spup(uint16_t row);
+        Button::State send_spup(uint16_t row);
 
         Job::Level joblevel_by_tab(uint16_t tab) const;
         SkillIcon* icon_by_position(Point<int16_t> cursorpos);
