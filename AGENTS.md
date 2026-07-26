@@ -13,6 +13,7 @@ Any issues or new features should utilize server existing infra and modify the c
 ## Hard Rules
 
 - Never modify anything under `assets/`.
+- Never modify anything under `wz/` in the Cosmic server source also.
 - Treat `assets/` as read-only input data at all times.
 - Do not delete, move, rename, regenerate, or reformat files in `assets/`.
 - Do not change build commands just to work around a missing local dependency. Use the documented Docker fallback instead.
