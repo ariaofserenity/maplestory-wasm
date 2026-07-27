@@ -28,6 +28,12 @@ namespace jrc
         constexpr int16_t VIEWWIDTH = 800;
         // Window and screen height.
         constexpr int16_t VIEWHEIGHT = 600;
+        // Size the client switches to once a character is in game. The login
+        // screens are backed by artwork drawn for exactly VIEWWIDTH x VIEWHEIGHT
+        // and would sit framed by empty space at anything larger, whereas in
+        // game the extra room simply reveals more of the map.
+        constexpr int16_t GAMEVIEWWIDTH = 1024;
+        constexpr int16_t GAMEVIEWHEIGHT = 768;
         // View y offset.
         constexpr int16_t VIEWYOFFSET = 10;
 

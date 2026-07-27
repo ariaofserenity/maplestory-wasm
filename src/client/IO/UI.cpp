@@ -24,6 +24,7 @@
 #include "../Audio/Audio.h"
 #include "../Console.h"
 #include "../Configuration.h"
+#include "../Constants.h"
 
 #include <GLFW/glfw3.h>
 #include <list>
@@ -72,12 +73,16 @@ namespace jrc
 
     void UI::change_state(State id)
     {
+        // Resize before building the state so its elements are laid out against
+        // the size they will actually be drawn at.
         switch (id)
         {
         case LOGIN:
+            Window::get().set_viewsize(Constants::VIEWWIDTH, Constants::VIEWHEIGHT);
             state = std::make_unique<UIStateLogin>();
             break;
         case GAME:
+            Window::get().set_viewsize(Constants::GAMEVIEWWIDTH, Constants::GAMEVIEWHEIGHT);
             state = std::make_unique<UIStateGame>();
             break;
         }

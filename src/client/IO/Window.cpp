@@ -143,6 +143,14 @@ namespace jrc
     {
         auto x = static_cast<int16_t>(xpos);
         auto y = static_cast<int16_t>(ypos);
+
+        // Everything is drawn VIEWYOFFSET pixels lower than its coordinate says,
+        // and layouts are authored around that. Pointer positions arrive in raw
+        // screen pixels, so they have to be moved into the same space or the
+        // drawn cursor trails the real one and every control is clickable
+        // slightly away from where it appears.
+        y = static_cast<int16_t>(y - Constants::VIEWYOFFSET);
+
         Point<int16_t> pos = Point<int16_t>(x, y);
         UI::get().send_cursor(pos);
     }
@@ -163,14 +171,19 @@ namespace jrc
         glfwSetWindowShouldClose(window, GL_FALSE);
     }
 
+    // Internal viewport the client last asked for. Browser resizes only change
+    // how the canvas is stretched by css, so the render surface must follow this
+    // rather than whatever size the canvas element reports.
+    int16_t requested_view_width = Constants::VIEWWIDTH;
+    int16_t requested_view_height = Constants::VIEWHEIGHT;
+
     void framebuffer_size_callback(GLFWwindow*, int width, int height)
     {
         if (width > 0 && height > 0)
         {
 #ifdef MS_PLATFORM_WASM
-            // Browser resizes only change CSS scaling; the game keeps a fixed internal viewport.
-            Constants::set_viewsize(Constants::VIEWWIDTH, Constants::VIEWHEIGHT);
-            glViewport(0, 0, Constants::VIEWWIDTH, Constants::VIEWHEIGHT);
+            Constants::set_viewsize(requested_view_width, requested_view_height);
+            glViewport(0, 0, requested_view_width, requested_view_height);
 #else
             Constants::set_viewsize(width, height);
             glViewport(0, 0, width, height);
@@ -353,6 +366,42 @@ namespace jrc
                 fadeprocedure();
             }
         }
+    }
+
+    void Window::set_viewsize(int16_t width, int16_t height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+        if (width == Constants::viewwidth() && height == Constants::viewheight())
+        {
+            return;
+        }
+
+        requested_view_width = width;
+        requested_view_height = height;
+        Constants::set_viewsize(width, height);
+
+        // Glfw has to be told too, and not only the page. Pointer positions are
+        // reported after being scaled from the window size glfw has on record
+        // into the render surface, so leaving that at the old size drags the
+        // cursor further from the real pointer the closer it gets to the bottom
+        // right of a canvas that has since grown.
+        glfwSetWindowSize(glwnd, width, height);
+
+#ifdef MS_PLATFORM_WASM
+        // Resizing the window lets the browser layer restyle the canvas, so the
+        // page redoes its own aspect ratio fit afterwards and stays in charge.
+        EM_ASM({
+            if (window.MapleWasmUI && window.MapleWasmUI.setGameSize) {
+                window.MapleWasmUI.setGameSize($0, $1);
+            }
+        }, width, height);
+#endif
+
+        glViewport(0, 0, width, height);
+        GraphicsGL::get().set_screensize(width, height);
     }
 
     void Window::check_events()

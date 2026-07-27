@@ -43,6 +43,10 @@ namespace jrc
         void fadeout(float step, std::function<void()> fadeprocedure);
         void check_events();
 
+        // Switches the internal render resolution. The login screens and the
+        // game run at different sizes, see Constants.
+        void set_viewsize(int16_t width, int16_t height);
+
         void setclipboard(const std::string& text) const;
         std::string getclipboard() const;
 

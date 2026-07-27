@@ -47,23 +47,44 @@
 
     <script>
         (function () {
-            const GAME_WIDTH = 800;
-            const GAME_HEIGHT = 600;
+            // Must match Constants::VIEWWIDTH / VIEWHEIGHT in the client. The
+            // client switches to its larger in-game size through setGameSize
+            // below, so these are the starting login dimensions only.
+            let GAME_WIDTH = 800;
+            let GAME_HEIGHT = 600;
 
             function syncCanvasResolution(canvas) {
                 if (canvas.width === GAME_WIDTH && canvas.height === GAME_HEIGHT) {
                     return;
                 }
 
-                if (typeof Module !== 'undefined' && typeof Module.setCanvasSize === 'function') {
-                    Module.setCanvasSize(GAME_WIDTH, GAME_HEIGHT);
-                } else {
-                    canvas.width = GAME_WIDTH;
-                    canvas.height = GAME_HEIGHT;
-                }
+                // Set the backing store directly rather than through emscripten's
+                // Module.setCanvasSize. That helper also drives canvas.style,
+                // clearing the width and height this page sets and re-deriving
+                // them from the screen when fullscreen, which fights the fit
+                // below and leaves the canvas sized to something other than the
+                // viewport.
+                canvas.width = GAME_WIDTH;
+                canvas.height = GAME_HEIGHT;
             }
 
             function getFittedCanvasSize(viewW, viewH) {
+                // Scale by whole multiples only. A fractional factor makes
+                // nearest-neighbour duplicate some source rows and columns and
+                // not others, which is what leaves the art looking chewed up, so
+                // the canvas is centred inside whatever space is left over
+                // instead of being stretched to fill it exactly.
+                const scale = Math.min(viewW / GAME_WIDTH, viewH / GAME_HEIGHT);
+                if (scale >= 1) {
+                    const factor = Math.floor(scale);
+                    return {
+                        width: GAME_WIDTH * factor,
+                        height: GAME_HEIGHT * factor
+                    };
+                }
+
+                // Nothing to snap to below a single multiple, so fall back to the
+                // largest aspect correct fit rather than overflowing the window.
                 if (viewW * GAME_HEIGHT <= viewH * GAME_WIDTH) {
                     const width = Math.max(1, Math.floor(viewW));
                     return {
@@ -89,17 +110,64 @@
                 syncCanvasResolution(canvas);
 
                 const { width, height } = getFittedCanvasSize(window.innerWidth, window.innerHeight);
+                const w = width + 'px';
+                const h = height + 'px';
 
-                canvas.style.width = width + 'px';
-                canvas.style.height = height + 'px';
+                // Only write when something actually differs, so the observer
+                // below settles instead of retriggering itself forever.
+                if (canvas.style.width !== w || canvas.style.height !== h) {
+                    canvas.style.setProperty('width', w, 'important');
+                    canvas.style.setProperty('height', h, 'important');
+                }
+            }
+
+            // Emscripten sizes the canvas itself when the GL window is created
+            // and from its own resize listener, both of which run after this
+            // page's, so whatever is set here gets overwritten and only comes
+            // back on the next resize. Re-fitting whenever the canvas element is
+            // touched makes this page authoritative regardless of that ordering.
+            let fitScheduled = false;
+            function scheduleFit() {
+                if (fitScheduled) {
+                    return;
+                }
+
+                fitScheduled = true;
+                requestAnimationFrame(function () {
+                    fitScheduled = false;
+                    fitCanvas();
+                });
+            }
+
+            function watchCanvas() {
+                const canvas = document.getElementById('canvas');
+                if (!canvas || typeof MutationObserver !== 'function') {
+                    return;
+                }
+
+                new MutationObserver(scheduleFit).observe(canvas, {
+                    attributes: true,
+                    attributeFilter: ['style', 'width', 'height']
+                });
             }
 
             window.MapleWasmUI = {
-                applyScale: fitCanvas
+                applyScale: fitCanvas,
+
+                // Called by the client when it switches render resolution, so
+                // the backing store and the aspect ratio fit follow along.
+                setGameSize: function (width, height) {
+                    if (width > 0 && height > 0) {
+                        GAME_WIDTH = width;
+                        GAME_HEIGHT = height;
+                        fitCanvas();
+                    }
+                }
             };
 
-            window.addEventListener('resize', fitCanvas);
-            document.addEventListener('fullscreenchange', fitCanvas);
+            window.addEventListener('resize', scheduleFit);
+            document.addEventListener('fullscreenchange', scheduleFit);
+            watchCanvas();
             fitCanvas();
         })();
 
