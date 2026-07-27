@@ -98,6 +98,12 @@ namespace jrc
         return !quitted;
     }
 
+    bool UI::is_key_pressed(int32_t keycode) const
+    {
+        auto iter = is_key_down.find(keycode);
+        return iter != is_key_down.end() && iter->second;
+    }
+
     uint64_t UI::get_cursor_press_id() const
     {
         return cursor_press_id;

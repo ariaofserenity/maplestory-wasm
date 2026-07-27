@@ -25,6 +25,8 @@
 
 #include "nlnx/nx.hpp"
 
+#include <GLFW/glfw3.h>
+
 
 namespace jrc
 {
@@ -82,6 +84,41 @@ namespace jrc
             buttons[id] = std::make_unique<MapleButton>(src, offset + origin);
         };
 
+        // Column artwork shared by both popups, taken from System.
+        nl::node bubble = mainbar["System"]["backgrnd"];
+        bubble_head = bubble["0"];
+        bubble_body = bubble["1"];
+        bubble_foot = bubble["2"];
+        open_bubble = BUBBLE_NONE;
+        escape_held = 0;
+
+        // Entries stack down from the top of whichever bubble owns them, so the
+        // same placement serves both.
+        auto place_entry = [this](uint16_t id, nl::node entry_src, Point<int16_t> bubble_pos, int16_t row) {
+            Point<int16_t> at = bubble_pos + Point<int16_t>(
+                BUBBLE_ENTRY_INSET,
+                static_cast<int16_t>(BUBBLE_ENTRY_TOP + row * BUBBLE_ENTRY_HEIGHT)
+            );
+
+            buttons[id] = std::make_unique<MapleButton>(entry_src, at);
+            buttons[id]->set_active(false);
+        };
+
+        nl::node menu = mainbar["Menu"];
+        place_entry(BT_MENU_ITEM,  menu["BtItem"],  MENU_POS, 0);
+        place_entry(BT_MENU_EQUIP, menu["BtEquip"], MENU_POS, 1);
+        place_entry(BT_MENU_STAT,  menu["BtStat"],  MENU_POS, 2);
+        place_entry(BT_MENU_SKILL, menu["BtSkill"], MENU_POS, 3);
+        place_entry(BT_MENU_QUEST, menu["BtQuest"], MENU_POS, 4);
+        place_entry(BT_MENU_MSN,   menu["BtMSN"],   MENU_POS, 5);
+
+        nl::node system = mainbar["System"];
+        place_entry(BT_OPTION_CHANNEL,      system["BtChannel"],      OPTIONS_POS, 0);
+        place_entry(BT_OPTION_KEYSETTING,   system["BtKeySetting"],   OPTIONS_POS, 1);
+        place_entry(BT_OPTION_GAMEOPTION,   system["BtGameOption"],   OPTIONS_POS, 2);
+        place_entry(BT_OPTION_SYSTEMOPTION, system["BtSystemOption"], OPTIONS_POS, 3);
+        place_entry(BT_OPTION_QUIT,         system["BtGameQuit"],     OPTIONS_POS, 4);
+
         place_button(BT_CASHSHOP, mainbar["BtCashShop"], BT_CASHSHOP_POS);
         place_button(BT_MENU,     mainbar["BtMenu"],     BT_MENU_POS);
         place_button(BT_CHANNEL,  mainbar["BtChannel"],  BT_CHANNEL_POS);
@@ -101,7 +138,35 @@ namespace jrc
 
     void UIStatusbar::draw(float alpha) const
     {
-        UIElement::draw(alpha);
+        // Drawn in three passes rather than through UIElement::draw, because the
+        // bubble has to sit above the bar's own buttons, which it overlaps, while
+        // staying below the entries it contains.
+        draw_sprites(alpha);
+
+        for (const auto& iter : buttons)
+        {
+            if (iter.first < BT_MENU_ITEM && iter.second)
+            {
+                iter.second->draw(position);
+            }
+        }
+
+        if (open_bubble == BUBBLE_MENU)
+        {
+            draw_bubble(position + MENU_POS, MENU_HEIGHT);
+        }
+        else if (open_bubble == BUBBLE_OPTIONS)
+        {
+            draw_bubble(position + OPTIONS_POS, OPTIONS_HEIGHT);
+        }
+
+        for (const auto& iter : buttons)
+        {
+            if (iter.first >= BT_MENU_ITEM && iter.second)
+            {
+                iter.second->draw(position);
+            }
+        }
 
         expbar.draw(position + Point<int16_t>(-261, -15));
         hpbar.draw(position + Point<int16_t>(-261, -31));
@@ -156,6 +221,86 @@ namespace jrc
         {
             iter.second -= Constants::TIMESTEP;
         }
+
+        // Holding escape dismisses an open popup. The key is polled rather than
+        // handled as an event because escape is delivered to whichever window is
+        // frontmost, so a press or a release can go elsewhere entirely and leave
+        // a counter driven by those events stuck part way.
+        if (open_bubble != BUBBLE_NONE && UI::get().is_key_pressed(GLFW_KEY_ESCAPE))
+        {
+            escape_held += Constants::TIMESTEP;
+
+            if (escape_held >= BUBBLE_ESCAPE_HOLD)
+            {
+                set_bubble(BUBBLE_NONE);
+            }
+        }
+        else
+        {
+            escape_held = 0;
+        }
+    }
+
+    void UIStatusbar::draw_bubble(Point<int16_t> at, int16_t height) const
+    {
+        int16_t body_height = height - BUBBLE_HEAD_HEIGHT - BUBBLE_FOOT_HEIGHT;
+
+        bubble_head.draw(at);
+        // The body is a single row of pixels, stretched over whatever room the
+        // entries of this particular bubble need.
+        bubble_body.draw({
+            at + Point<int16_t>(0, BUBBLE_HEAD_HEIGHT),
+            Point<int16_t>(BUBBLE_WIDTH, body_height)
+        });
+        bubble_foot.draw(at + Point<int16_t>(0, BUBBLE_HEAD_HEIGHT + body_height));
+    }
+
+    Rectangle<int16_t> UIStatusbar::bubble_bounds() const
+    {
+        Point<int16_t> at = position;
+        int16_t height = 0;
+
+        switch (open_bubble)
+        {
+        case BUBBLE_MENU:
+            at += MENU_POS;
+            height = MENU_HEIGHT;
+            break;
+        case BUBBLE_OPTIONS:
+            at += OPTIONS_POS;
+            height = OPTIONS_HEIGHT;
+            break;
+        default:
+            return {};
+        }
+
+        return { at, at + Point<int16_t>(BUBBLE_WIDTH, height) };
+    }
+
+    void UIStatusbar::set_bubble(Bubble which)
+    {
+        if (open_bubble == which)
+        {
+            return;
+        }
+
+        open_bubble = which;
+
+        auto show = [this](uint16_t first, uint16_t last, bool on) {
+            for (uint16_t id = first; id <= last; ++id)
+            {
+                buttons[id]->set_active(on);
+                buttons[id]->set_state(Button::NORMAL);
+            }
+        };
+
+        show(BT_MENU_ITEM, BT_MENU_MSN, which == BUBBLE_MENU);
+        show(BT_OPTION_CHANNEL, BT_OPTION_QUIT, which == BUBBLE_OPTIONS);
+
+        if (which != BUBBLE_NONE)
+        {
+            Sound(Sound::DLGNOTICE).play();
+        }
     }
 
     void UIStatusbar::update_layout_position()
@@ -186,6 +331,42 @@ namespace jrc
         case BT_KEYSETTING:
             UI::get().send_menu(KeyAction::KEYCONFIG);
             return Button::NORMAL;
+        case BT_MENU:
+            set_bubble(open_bubble == BUBBLE_MENU ? BUBBLE_NONE : BUBBLE_MENU);
+            return Button::NORMAL;
+        case BT_OPTIONS:
+            set_bubble(open_bubble == BUBBLE_OPTIONS ? BUBBLE_NONE : BUBBLE_OPTIONS);
+            return Button::NORMAL;
+        case BT_MENU_ITEM:
+            UI::get().send_menu(KeyAction::INVENTORY);
+            set_bubble(BUBBLE_NONE);
+            return Button::NORMAL;
+        case BT_MENU_EQUIP:
+            UI::get().send_menu(KeyAction::EQUIPS);
+            set_bubble(BUBBLE_NONE);
+            return Button::NORMAL;
+        case BT_MENU_STAT:
+            UI::get().send_menu(KeyAction::CHARSTATS);
+            set_bubble(BUBBLE_NONE);
+            return Button::NORMAL;
+        case BT_MENU_SKILL:
+            UI::get().send_menu(KeyAction::SKILLBOOK);
+            set_bubble(BUBBLE_NONE);
+            return Button::NORMAL;
+        case BT_OPTION_KEYSETTING:
+            UI::get().send_menu(KeyAction::KEYCONFIG);
+            set_bubble(BUBBLE_NONE);
+            return Button::NORMAL;
+        case BT_MENU_QUEST:
+        case BT_MENU_MSN:
+        case BT_OPTION_CHANNEL:
+        case BT_OPTION_GAMEOPTION:
+        case BT_OPTION_SYSTEMOPTION:
+        case BT_OPTION_QUIT:
+            // Nothing behind these two yet, but they still close the bubble so
+            // it does not sit open over an unchanged screen.
+            set_bubble(BUBBLE_NONE);
+            return Button::NORMAL;
         default:
             // Nothing is wired to these yet, but they still have to settle back
             // to a resting state. Returning PRESSED would leave them stuck in
@@ -201,6 +382,13 @@ namespace jrc
             position - Point<int16_t>(512, 84),
             position - Point<int16_t>(512, 84) + dimension
         );
+
+        // A bubble rises well above the bar's own strip, so without this its
+        // entries would sit outside the area that receives the cursor at all.
+        if (open_bubble != BUBBLE_NONE && bubble_bounds().contains(cursorpos))
+        {
+            return true;
+        }
 
         return bounds.contains(cursorpos) || chatbar.is_in_range(cursorpos);
     }

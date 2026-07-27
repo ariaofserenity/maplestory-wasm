@@ -64,6 +64,10 @@ namespace jrc
         void rightclick();
         void doubleclick();
         void send_key(int32_t keycode, bool pressed);
+        // Whether a key is currently held. Recorded for every key the ui
+        // sees, including ones an element consumed, so it stays right even
+        // when press and release are delivered to different places.
+        bool is_key_pressed(int32_t keycode) const;
         void send_menu(KeyAction::Id action);
 
         void set_scrollnotice(const std::string& notice);

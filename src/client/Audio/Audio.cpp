@@ -310,6 +310,7 @@ namespace jrc
 
         add_sound(Sound::BUTTONCLICK, uisrc["BtMouseClick"]);
         add_sound(Sound::BUTTONOVER,  uisrc["BtMouseOver"]);
+        add_sound(Sound::DLGNOTICE,   uisrc["DlgNotice"]);
         add_sound(Sound::SELECTCHAR,  uisrc["CharSelect"]);
 
         nl::node gamesrc = nl::nx::sound["Game.img"];

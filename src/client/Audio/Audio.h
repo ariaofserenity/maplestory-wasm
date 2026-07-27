@@ -36,6 +36,7 @@ namespace jrc
             // UI
             BUTTONCLICK,
             BUTTONOVER,
+            DLGNOTICE,
 
             // Login
             SELECTCHAR,

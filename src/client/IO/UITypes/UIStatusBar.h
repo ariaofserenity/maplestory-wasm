@@ -72,7 +72,19 @@ namespace jrc
         Button::State button_pressed(uint16_t buttonid) override;
 
     private:
+        // Which popup is currently raised, if any. Only one can be open at a
+        // time, so opening one closes the other.
+        enum Bubble
+        {
+            BUBBLE_NONE,
+            BUBBLE_MENU,
+            BUBBLE_OPTIONS
+        };
+
         void update_layout_position();
+        void draw_bubble(Point<int16_t> at, int16_t height) const;
+        Rectangle<int16_t> bubble_bounds() const;
+        void set_bubble(Bubble which);
         float getexppercent() const;
         float gethppercent() const;
         float getmppercent() const;
@@ -91,7 +103,24 @@ namespace jrc
             BT_INVENTORY,
             BT_EQUIPS,
             BT_SKILL,
-            BT_KEYSETTING
+            BT_KEYSETTING,
+
+            // Entries of the popup bubbles. Each block is kept contiguous so it
+            // can be shown and hidden as a range, and both start after every
+            // button belonging to the bar itself so the two can be told apart
+            // when drawing.
+            BT_MENU_ITEM,
+            BT_MENU_EQUIP,
+            BT_MENU_STAT,
+            BT_MENU_SKILL,
+            BT_MENU_QUEST,
+            BT_MENU_MSN,
+
+            BT_OPTION_CHANNEL,
+            BT_OPTION_KEYSETTING,
+            BT_OPTION_GAMEOPTION,
+            BT_OPTION_SYSTEMOPTION,
+            BT_OPTION_QUIT
         };
 
         // Placement of the system button row, given as the top left corner of
@@ -113,8 +142,48 @@ namespace jrc
             BT_OPTIONS_POS.x(), SMALL_BUTTON_Y
         };
 
+        // Popup bubbles. Both are built from the same three piece column: a
+        // head, a single row of body meant to be stretched, and a foot. One
+        // entry fills each row of the body, so a bubble is only ever as tall as
+        // the entries stacked inside it.
+        static constexpr int16_t BUBBLE_WIDTH = 79;
+        static constexpr int16_t BUBBLE_HEAD_HEIGHT = 34;
+        static constexpr int16_t BUBBLE_FOOT_HEIGHT = 41;
+        static constexpr int16_t BUBBLE_ENTRY_HEIGHT = 25;
+        static constexpr int16_t BUBBLE_ENTRY_INSET = 8;
+
+        // Room left above the first entry and below the last. The head and foot
+        // are mostly rounded cap and tail, so the entries tuck into them instead
+        // of starting where the head's bitmap happens to end, which otherwise
+        // leaves a band of empty bubble at each end. These two are the values to
+        // change if the entries sit too near or too far from the ends.
+        static constexpr int16_t BUBBLE_ENTRY_TOP = 22;
+        static constexpr int16_t BUBBLE_ENTRY_BOTTOM = 18;
+
+        static constexpr int16_t MENU_ENTRY_COUNT = BT_MENU_MSN - BT_MENU_ITEM + 1;
+        static constexpr int16_t OPTIONS_ENTRY_COUNT = BT_OPTION_QUIT - BT_OPTION_CHANNEL + 1;
+
+        static constexpr int16_t MENU_HEIGHT =
+            BUBBLE_ENTRY_TOP + BUBBLE_ENTRY_HEIGHT * MENU_ENTRY_COUNT + BUBBLE_ENTRY_BOTTOM;
+        static constexpr int16_t OPTIONS_HEIGHT =
+            BUBBLE_ENTRY_TOP + BUBBLE_ENTRY_HEIGHT * OPTIONS_ENTRY_COUNT + BUBBLE_ENTRY_BOTTOM;
+
+        // Top left of each bubble, centred over the button it belongs to and
+        // resting directly on top of it.
+        static constexpr Point<int16_t> MENU_POS = {
+            static_cast<int16_t>(BT_MENU_POS.x() - 2),
+            static_cast<int16_t>(BT_MENU_POS.y() - MENU_HEIGHT)
+        };
+        static constexpr Point<int16_t> OPTIONS_POS = {
+            static_cast<int16_t>(BT_OPTIONS_POS.x() - 2),
+            static_cast<int16_t>(BT_OPTIONS_POS.y() - OPTIONS_HEIGHT)
+        };
+
         static constexpr Point<int16_t> POSITION  = {  512, 590 };
         static constexpr Point<int16_t> DIMENSION = { 1366, 80  };
+        // How long escape has to be held before an open popup is dismissed.
+        static constexpr time_t BUBBLE_ESCAPE_HOLD = 100;
+
         static constexpr time_t MESSAGE_COOLDOWN = 1'000;
 
         const CharStats& stats;
@@ -131,5 +200,11 @@ namespace jrc
         Text joblabel;
         Animation hpanimation;
         Animation mpanimation;
+
+        Texture bubble_head;
+        Texture bubble_body;
+        Texture bubble_foot;
+        Bubble open_bubble;
+        time_t escape_held;
     };
 }
