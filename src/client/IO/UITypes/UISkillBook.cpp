@@ -67,6 +67,52 @@ namespace jrc
         {
             return (skill_id / 10000) % 10 == 2;
         }
+
+        // Every level grants three sp once the first advancement has been made.
+        constexpr int16_t SP_PER_LEVEL = 3;
+
+        // Character level at which a job tier is entered. Magician branches make
+        // their first advancement two levels earlier than everyone else, the
+        // same offset the server applies when deriving expected sp totals.
+        int16_t tier_entry_level(Job::Level tier, bool magician)
+        {
+            switch (tier)
+            {
+            case Job::FIRST:
+                return magician ? 8 : 10;
+            case Job::SECOND:
+                return 30;
+            case Job::THIRD:
+                return 70;
+            case Job::FOURTH:
+                return 120;
+            default:
+                return 0;
+            }
+        }
+
+        // Character level at which a tier stops paying into its own pool, which
+        // is where the next tier starts. The fourth tier runs to the level cap.
+        int16_t tier_exit_level(Job::Level tier, bool magician)
+        {
+            return tier == Job::FOURTH
+                ? 200
+                : tier_entry_level(Job::get_next_level(tier), magician);
+        }
+
+        // Sp granted by an advancement on top of the per-level grants. All of
+        // them award a single point except the fourth, which awards three.
+        int16_t tier_advancement_sp(Job::Level tier)
+        {
+            return tier == Job::FOURTH ? 3 : 1;
+        }
+
+        // Explorer, cygnus and evan magicians all share the same hundreds digit
+        // in their job id, which is how the server recognises the branch too.
+        bool is_magician_branch(uint16_t job_id)
+        {
+            return (job_id / 100) % 10 == 2;
+        }
     }
 
     constexpr Point<int16_t> UISkillbook::SKILL_OFFSET;
@@ -487,10 +533,111 @@ namespace jrc
         return remaining > 0 ? remaining : 0;
     }
 
+    int16_t UISkillbook::get_tier_granted_sp(Job::Level tier) const
+    {
+        if (tier == Job::BEGINNER)
+        {
+            return 0;
+        }
+
+        bool magician = is_magician_branch(job.get_id());
+        int16_t entry = tier_entry_level(tier, magician);
+        int16_t leave = tier_exit_level(tier, magician);
+
+        // Sp is attributed by the character level it was earned at, not by when
+        // the advancement quest was handed in. Reaching level 31 while still
+        // first job earns that point for the second job tier, so a tier stops
+        // accruing at its exit level whether or not the character moved on.
+        int16_t levels = stats.get_stat(Maplestat::LEVEL) - entry;
+        if (levels < 0)
+        {
+            levels = 0;
+        }
+        if (levels > leave - entry)
+        {
+            levels = leave - entry;
+        }
+
+        // The point the advancement itself awards only exists once the quest has
+        // actually been completed, unlike the per-level grants above.
+        int16_t advancement = job.get_level() >= tier
+            ? tier_advancement_sp(tier)
+            : 0;
+
+        return advancement + SP_PER_LEVEL * levels;
+    }
+
+    int16_t UISkillbook::get_tier_spent_sp(Job::Level tier) const
+    {
+        // A tier that has not been advanced into has no book of its own yet, and
+        // asking the job for its sub-job id would fall back to the beginner one.
+        if (tier == Job::BEGINNER || tier > job.get_level())
+        {
+            return 0;
+        }
+
+        // Mirrors how the server counts spent sp: every point sitting in a skill
+        // of the tier's own book. Beginner skills are excluded by construction
+        // since they live in a separate book and cost no sp at all.
+        int16_t spent = 0;
+        for (int32_t skill_id : JobData::get(job.get_subjob(tier)).get_skills())
+        {
+            spent += static_cast<int16_t>(skillbook.get_level(skill_id));
+        }
+
+        return spent;
+    }
+
     int16_t UISkillbook::get_available_sp() const
     {
-        Job::Level joblevel = joblevel_by_tab(tab);
-        return joblevel == Job::BEGINNER ? beginner_sp : sp;
+        Job::Level tier = joblevel_by_tab(tab);
+        if (tier == Job::BEGINNER)
+        {
+            return beginner_sp;
+        }
+
+        // Sp belongs to the tier it was earned in, but the server keeps a single
+        // pool and reports only its total, so the split has to be rebuilt here.
+        // Each tier claims whatever its own grants left unspent, oldest first,
+        // and every claim is capped by what is left of the pool. That cap is
+        // what keeps the reconstruction honest when the grants cannot be modelled
+        // exactly, such as a character that stayed a beginner past level 10 and
+        // so never collected the per-level sp this tier would otherwise expect:
+        // the book can then still never offer a point the server would refuse.
+        int16_t remaining = sp;
+        int16_t claimed = 0;
+
+        for (uint16_t lv = Job::FIRST; lv <= Job::FOURTH; ++lv)
+        {
+            Job::Level candidate = static_cast<Job::Level>(lv);
+
+            int16_t budget = get_tier_granted_sp(candidate) - get_tier_spent_sp(candidate);
+            if (budget < 0)
+            {
+                budget = 0;
+            }
+            if (budget > remaining)
+            {
+                budget = remaining;
+            }
+
+            if (candidate == tier)
+            {
+                claimed = budget;
+            }
+
+            remaining -= budget;
+        }
+
+        // Whatever the grant model does not account for, from gm awards or quest
+        // rewards, is offered to the tier being played rather than left stranded
+        // in a pool no tab would ever show.
+        if (tier == job.get_level())
+        {
+            claimed += remaining;
+        }
+
+        return claimed;
     }
 
     void UISkillbook::update_sp_label()

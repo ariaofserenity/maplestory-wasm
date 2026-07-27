@@ -129,43 +129,57 @@ namespace jrc
             return { Cursor::CLICKING, true };
         }
 
-        for (auto& btit : buttons)
+        // The whole map has to be walked even once the hovered button is known.
+        // Acting on the hit right away used to leave every button ordered after
+        // it stuck in MOUSEOVER, so moving the cursor towards a lower id (the
+        // fourth job tab back to the beginner tab in the skill book) left the
+        // button it came from highlighted.
+        auto hovered = buttons.end();
+        for (auto btit = buttons.begin(); btit != buttons.end(); ++btit)
         {
-            if (btit.second->is_active() && btit.second->bounds(position).contains(pos))
+            bool hit = btit->second->is_active()
+                && btit->second->bounds(position).contains(pos);
+
+            if (hit && hovered == buttons.end())
             {
-                if (down)
-                {
-                    handled_button_press_id = current_press_id;
-
-                    if (btit.second->get_state() == Button::NORMAL)
-                    {
-                        Sound(Sound::BUTTONOVER).play();
-                    }
-
-                    Sound(Sound::BUTTONCLICK).play();
-
-                    btit.second->set_state(button_pressed(btit.first));
-                    return { Cursor::CLICKING, true };
-                }
-
-                if (btit.second->get_state() == Button::NORMAL)
-                {
-                    Sound(Sound::BUTTONOVER).play();
-                    btit.second->set_state(Button::MOUSEOVER);
-                }
-
-                return { Cursor::CANCLICK, true };
+                hovered = btit;
             }
-            else if (btit.second->get_state() == Button::MOUSEOVER)
+            else if (btit->second->get_state() == Button::MOUSEOVER)
             {
-                btit.second->set_state(Button::NORMAL);
+                btit->second->set_state(Button::NORMAL);
             }
         }
 
-        // Do not keep a synthetic "pressed" cursor when no control handled
-        // the current press. Otherwise, dragging onto a button while holding
-        // the mouse can incorrectly fire that button.
-        return { Cursor::IDLE, false };
+        if (hovered == buttons.end())
+        {
+            // Do not keep a synthetic "pressed" cursor when no control handled
+            // the current press. Otherwise, dragging onto a button while holding
+            // the mouse can incorrectly fire that button.
+            return { Cursor::IDLE, false };
+        }
+
+        if (down)
+        {
+            handled_button_press_id = current_press_id;
+
+            if (hovered->second->get_state() == Button::NORMAL)
+            {
+                Sound(Sound::BUTTONOVER).play();
+            }
+
+            Sound(Sound::BUTTONCLICK).play();
+
+            hovered->second->set_state(button_pressed(hovered->first));
+            return { Cursor::CLICKING, true };
+        }
+
+        if (hovered->second->get_state() == Button::NORMAL)
+        {
+            Sound(Sound::BUTTONOVER).play();
+            hovered->second->set_state(Button::MOUSEOVER);
+        }
+
+        return { Cursor::CANCLICK, true };
     }
 
     void UIElement::send_scroll(double)
