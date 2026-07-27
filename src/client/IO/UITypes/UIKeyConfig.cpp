@@ -100,30 +100,37 @@ namespace jrc
           keyboard(&UI::get().get_keyboard()),
           dirty(false)
     {
-        nl::node src = nl::nx::ui["UIWindow.img"]["KeyConfig"];
+        // The legacy UIWindow node still carries the original korean button
+        // artwork and lacks the two inner background layers requested just
+        // below, so the localised set in UIWindow2 is the one to read.
+        nl::node src = nl::nx::ui["UIWindow2.img"]["KeyConfig"];
         icon = src["icon"];
 
-        Texture bg1 = Texture(src["backgrnd"]);
-        Texture bg2 = Texture(src["backgrnd2"]);
-        Texture bg3 = Texture(src["backgrnd3"]);
-        sprites.emplace_back(src["backgrnd"],  DrawArgument(bg1.get_origin()));
-        sprites.emplace_back(src["backgrnd2"], DrawArgument(bg2.get_origin()));
-        sprites.emplace_back(src["backgrnd3"], DrawArgument(bg3.get_origin()));
+        // Each layer is inset by its own origin, the outer frame sitting at the
+        // corner and the two panels stepping inwards from it. Passing the origin
+        // back in as a position, as was needed for the legacy artwork's centred
+        // frame, cancels exactly that and stacks all three in the corner.
+        sprites.emplace_back(src["backgrnd"]);
+        sprites.emplace_back(src["backgrnd2"]);
+        sprites.emplace_back(src["backgrnd3"]);
 
         nl::node close = nl::nx::ui["Basic.img"]["BtClose"];
 
         Point<int16_t> bgdim = Texture(src["backgrnd"]).get_dimensions();
         buttons[CLOSE] = std::make_unique<MapleButton>(close, Point<int16_t>(bgdim.x() - 12, 9));
-        buttons[CANCEL] = std::make_unique<MapleButton>(src["BtCancel"]);
-        buttons[DEFAULT] = std::make_unique<MapleButton>(src["BtDefault"]);
-        buttons[DELETE] = std::make_unique<MapleButton>(src["BtDelete"]);
-        buttons[KEYSETTING] = std::make_unique<MapleButton>(src["BtQuickSlot"]);
-        buttons[OK] = std::make_unique<MapleButton>(src["BtOK"]);
-        english_button_labels[CANCEL] = Text(Text::A11M, Text::CENTER, Text::WHITE, "Cancel");
-        english_button_labels[DEFAULT] = Text(Text::A11M, Text::CENTER, Text::WHITE, "Default");
-        english_button_labels[DELETE] = Text(Text::A11M, Text::CENTER, Text::WHITE, "Delete");
-        english_button_labels[KEYSETTING] = Text(Text::A11M, Text::CENTER, Text::WHITE, "Quick Slot");
-        english_button_labels[OK] = Text(Text::A11M, Text::CENTER, Text::WHITE, "OK");
+        // Folding the artwork's own origin back in lets the constants in the
+        // header read as plain offsets from the window corner rather than as
+        // corrections to whatever position each piece of artwork carries.
+        auto place_button = [this](uint16_t id, nl::node button_src, Point<int16_t> offset) {
+            Point<int16_t> origin = button_src["normal"]["0"]["origin"];
+            buttons[id] = std::make_unique<MapleButton>(button_src, offset + origin);
+        };
+
+        place_button(DEFAULT,    src["BtDefault"],   BT_DEFAULT_POS);
+        place_button(DELETE,     src["BtDelete"],    BT_DELETE_POS);
+        place_button(KEYSETTING, src["BtQuickSlot"], BT_KEYSETTING_POS);
+        place_button(OK,         src["BtOK"],        BT_OK_POS);
+        place_button(CANCEL,     src["BtCancel"],    BT_CANCEL_POS);
 
         dimension = bgdim;
         dragarea = { bgdim.x(), 20 };
@@ -137,7 +144,6 @@ namespace jrc
     void UIKeyConfig::draw(float alpha) const
     {
         UIElement::draw(alpha);
-        draw_english_button_labels();
 
         for (const auto& kv : staged_mappings)
         {
@@ -166,25 +172,6 @@ namespace jrc
             {
                 kv.second->draw(position + pit->second);
             }
-        }
-    }
-
-    void UIKeyConfig::draw_english_button_labels() const
-    {
-        for (const auto& kv : english_button_labels)
-        {
-            auto bit = buttons.find(kv.first);
-            if (bit == buttons.end() || !bit->second)
-            {
-                continue;
-            }
-
-            Rectangle<int16_t> rect = bit->second->bounds(position);
-            Point<int16_t> center(
-                static_cast<int16_t>((rect.l() + rect.r()) / 2),
-                static_cast<int16_t>((rect.t() + rect.b()) / 2 + 2)
-            );
-            kv.second.draw(center);
         }
     }
 
@@ -368,11 +355,21 @@ namespace jrc
     {
         key_bounds.clear();
 
+        // Shifts the whole block of key bounds below, which were measured against
+        // the legacy artwork and so start from the window corner. The innermost
+        // background covers x 10 to 612 and y 28 to 230, and the block itself is
+        // 566 by 204, so it very nearly fills that panel vertically: any real
+        // downward shift pushes the bottom row past the artwork, which is why
+        // this stays near zero on y while x has room to spare.
+        constexpr Point<int16_t> KEY_GRID_ORIGIN = { -1, 0 };
+
         auto add_key = [&](KeyConfig::Key key, int16_t x, int16_t y, int16_t width = 32, int16_t height = 32)
         {
+            Point<int16_t> lt = Point<int16_t>(x, y) + KEY_GRID_ORIGIN;
+
             key_bounds[key] = Rectangle<int16_t>(
-                Point<int16_t>(x, y),
-                Point<int16_t>(x + width, y + height)
+                lt,
+                lt + Point<int16_t>(width, height)
             );
         };
 
@@ -389,17 +386,36 @@ namespace jrc
         // The background already paints the keyboard legends. These bounds
         // follow the visible key caps so dragging and dropping lines up with
         // the artwork in the current UI.nx set.
-        add_key(KeyConfig::ESCAPE, 12, 26);
-        add_row(
+
+        // Top row. Each function key group has its own left edge rather than
+        // being derived from a shared gap, so a group can be moved on its own
+        // without disturbing the ones before it. Raising a value moves that group
+        // right, raising the shared y moves the whole row down.
+        constexpr int16_t TOP_ROW_Y = 28;
+        constexpr int16_t ESCAPE_X = 12;
+        constexpr int16_t FKEY_STEP = 34;
+        constexpr int16_t FKEY_GROUP1_X = 79;   // F1 to F4
+        constexpr int16_t FKEY_GROUP2_X = 224;  // F5 to F8
+        constexpr int16_t FKEY_GROUP3_X = 369;  // F9 to F12
+        constexpr int16_t SCROLL_LOCK_X = 546;
+
+        add_key(KeyConfig::ESCAPE, ESCAPE_X, TOP_ROW_Y);
+
+        auto add_fkey_group = [&](std::initializer_list<KeyConfig::Key> keys, int16_t start_x)
+        {
+            int16_t x = start_x;
+            for (KeyConfig::Key key : keys)
             {
-                KeyConfig::F1, KeyConfig::F2, KeyConfig::F3, KeyConfig::F4,
-                KeyConfig::F5, KeyConfig::F6, KeyConfig::F7, KeyConfig::F8,
-                KeyConfig::F9, KeyConfig::F10, KeyConfig::F11, KeyConfig::F12
-            },
-            80,
-            26
-        );
-        add_key(KeyConfig::SCROLL_LOCK, 546, 26);
+                add_key(key, x, TOP_ROW_Y);
+                x += FKEY_STEP;
+            }
+        };
+
+        add_fkey_group({ KeyConfig::F1, KeyConfig::F2, KeyConfig::F3, KeyConfig::F4 }, FKEY_GROUP1_X);
+        add_fkey_group({ KeyConfig::F5, KeyConfig::F6, KeyConfig::F7, KeyConfig::F8 }, FKEY_GROUP2_X);
+        add_fkey_group({ KeyConfig::F9, KeyConfig::F10, KeyConfig::F11, KeyConfig::F12 }, FKEY_GROUP3_X);
+
+        add_key(KeyConfig::SCROLL_LOCK, SCROLL_LOCK_X, TOP_ROW_Y);
 
         add_key(KeyConfig::GRAVE_ACCENT, 12, 66);
         add_row(
@@ -418,12 +434,27 @@ namespace jrc
                 KeyConfig::Q, KeyConfig::W, KeyConfig::E, KeyConfig::R,
                 KeyConfig::T, KeyConfig::Y, KeyConfig::U, KeyConfig::I,
                 KeyConfig::O, KeyConfig::P, KeyConfig::LEFT_BRACKET,
-                KeyConfig::RIGHT_BRACKET, KeyConfig::BACKSLASH
+                KeyConfig::RIGHT_BRACKET
             },
-            96,
+            62,
             99
         );
-        add_row({ KeyConfig::DELETE, KeyConfig::END, KeyConfig::PAGE_DOWN }, 512, 99);
+
+        // Backslash ends the row but is placed on its own, because carrying the
+        // run one step further puts it across the delete key of the block to its
+        // right. Two slots over the same pixels leave whichever the search finds
+        // second reachable only as an area that takes a drop and shows nothing.
+        constexpr int16_t BACKSLASH_X = 470;
+
+        add_key(KeyConfig::BACKSLASH, BACKSLASH_X, 99);
+        // Delete is split out of the row because the artwork sets it a little
+        // right of the column its two neighbours share.
+        constexpr int16_t NAV_LOWER_Y = 99;
+        constexpr int16_t NAV_COLUMN_X = 512;
+        constexpr int16_t DELETE_X = NAV_COLUMN_X;
+
+        add_key(KeyConfig::DELETE, DELETE_X, NAV_LOWER_Y);
+        add_row({ KeyConfig::END, KeyConfig::PAGE_DOWN }, NAV_COLUMN_X + 34, NAV_LOWER_Y);
 
         add_row(
             {

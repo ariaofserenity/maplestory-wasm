@@ -69,7 +69,6 @@ namespace jrc
         Keyboard::Mapping staged_mapping(int32_t key) const;
         KeyConfig::Key key_by_position(Point<int16_t> cursorpos) const;
         int32_t unbound_action_by_position(Point<int16_t> cursorpos) const;
-        void draw_english_button_labels() const;
 
         bool is_action_mapping(const Keyboard::Mapping& mapping) const;
         static KeyType::Id action_type(int32_t action);
@@ -88,7 +87,6 @@ namespace jrc
         std::map<int32_t, std::unique_ptr<Icon>> skill_icons;
         std::map<int32_t, std::unique_ptr<Icon>> item_icons;
         std::set<int32_t> bound_actions;
-        std::map<uint16_t, Text> english_button_labels;
 
         bool dirty;
 
@@ -101,5 +99,17 @@ namespace jrc
             KEYSETTING,
             OK
         };
+
+        // Top left corner of each action button within the window. The artwork
+        // carries positions of its own, but they leave the pair on the right
+        // apart from each other, so they are stated here instead. Moving one of
+        // these moves its artwork and its clickable area together. The buttons
+        // are 57, 68, 93 and 40 wide in the order listed.
+        static constexpr int16_t ACTION_BUTTON_Y = 239;
+        static constexpr Point<int16_t> BT_DEFAULT_POS   = {  10, ACTION_BUTTON_Y };
+        static constexpr Point<int16_t> BT_DELETE_POS    = {  73, ACTION_BUTTON_Y };
+        static constexpr Point<int16_t> BT_KEYSETTING_POS = { 147, ACTION_BUTTON_Y };
+        static constexpr Point<int16_t> BT_OK_POS        = { 526, ACTION_BUTTON_Y };
+        static constexpr Point<int16_t> BT_CANCEL_POS    = { 568, ACTION_BUTTON_Y };
     };
 }

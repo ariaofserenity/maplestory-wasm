@@ -82,15 +82,35 @@ namespace jrc
             BT_WHISPER,
             BT_CALLGM,
             BT_CASHSHOP,
-            BT_TRADE,
             BT_MENU,
+            BT_CHANNEL,
             BT_OPTIONS,
             BT_CHARACTER,
             BT_STATS,
             BT_QUEST,
             BT_INVENTORY,
             BT_EQUIPS,
-            BT_SKILL
+            BT_SKILL,
+            BT_KEYSETTING
+        };
+
+        // Placement of the system button row, given as the top left corner of
+        // each button relative to the bar's anchor. Moving one of these moves
+        // its artwork and its clickable area together, so they can be nudged
+        // individually without touching anything else. The buttons are 75 wide,
+        // hence the wider step before the last one, which leaves the small
+        // separator the bar artwork draws at that point.
+        static constexpr Point<int16_t> BT_CASHSHOP_POS = {  57, -36 };
+        static constexpr Point<int16_t> BT_MENU_POS     = { 134, -36 };
+        static constexpr Point<int16_t> BT_CHANNEL_POS  = { 211, -36 };
+        static constexpr Point<int16_t> BT_OPTIONS_POS  = { 292, -36 };
+
+        // Sits on the row of small buttons rather than the system row, so it
+        // takes their y. Its x is taken from the system button that follows the
+        // separator, so the two stay flush with each other if that one is moved.
+        static constexpr int16_t SMALL_BUTTON_Y = -58;
+        static constexpr Point<int16_t> BT_KEYSETTING_POS = {
+            BT_OPTIONS_POS.x(), SMALL_BUTTON_Y
         };
 
         static constexpr Point<int16_t> POSITION  = {  512, 590 };

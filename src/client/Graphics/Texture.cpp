@@ -28,6 +28,13 @@ namespace jrc
     {
         if (src.data_type() == nl::node::type::bitmap)
         {
+            // A source link borrows another node's pixels, but placement stays
+            // with the node carrying the link, so its own origin has to be kept
+            // hold of before following it. Reading the origin off the target
+            // drops the graphic wherever the window it was borrowed from
+            // happened to want it.
+            nl::node placement = src;
+
             std::string link = src["source"];
             if (!link.empty())
             {
@@ -40,7 +47,7 @@ namespace jrc
             }
 
             bitmap = src;
-            origin = src["origin"];
+            origin = placement["origin"] ? placement["origin"] : src["origin"];
             dimensions = Point<int16_t>(bitmap.width(),  bitmap.height());
 
             GraphicsGL::get().addbitmap(bitmap);

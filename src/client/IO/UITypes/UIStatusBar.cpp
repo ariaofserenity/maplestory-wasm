@@ -70,10 +70,22 @@ namespace jrc
         buttons[BT_WHISPER]   = std::make_unique<MapleButton>(mainbar["BtChat"]);
         buttons[BT_CALLGM]    = std::make_unique<MapleButton>(mainbar["BtClaim"]);
 
-        buttons[BT_CASHSHOP]  = std::make_unique<MapleButton>(mainbar["BtCashShop"]);
-        buttons[BT_TRADE]     = std::make_unique<MapleButton>(mainbar["BtMTS"]);
-        buttons[BT_MENU]      = std::make_unique<MapleButton>(mainbar["BtMenu"]);
-        buttons[BT_OPTIONS]   = std::make_unique<MapleButton>(mainbar["BtSystem"]);
+        // Each piece of button artwork carries an origin that MapleButton
+        // subtracts when it draws and when it hit tests. Folding that back in
+        // here lets the constants in the header read as plain offsets from the
+        // bar instead of as corrections to whatever the artwork happens to
+        // specify. BtMTS is deliberately absent: the bar shows it in place of
+        // BtCashShop rather than alongside it, and drawing both leaves the two
+        // overlapping each other and BtMenu.
+        auto place_button = [this](uint16_t id, nl::node src, Point<int16_t> offset) {
+            Point<int16_t> origin = src["normal"]["0"]["origin"];
+            buttons[id] = std::make_unique<MapleButton>(src, offset + origin);
+        };
+
+        place_button(BT_CASHSHOP, mainbar["BtCashShop"], BT_CASHSHOP_POS);
+        place_button(BT_MENU,     mainbar["BtMenu"],     BT_MENU_POS);
+        place_button(BT_CHANNEL,  mainbar["BtChannel"],  BT_CHANNEL_POS);
+        place_button(BT_OPTIONS,  mainbar["BtSystem"],   BT_OPTIONS_POS);
 
         buttons[BT_CHARACTER] = std::make_unique<MapleButton>(mainbar["BtCharacter"]);
         buttons[BT_STATS]     = std::make_unique<MapleButton>(mainbar["BtStat"]);
@@ -81,6 +93,8 @@ namespace jrc
         buttons[BT_INVENTORY] = std::make_unique<MapleButton>(mainbar["BtInven"]);
         buttons[BT_EQUIPS]    = std::make_unique<MapleButton>(mainbar["BtEquip"]);
         buttons[BT_SKILL]     = std::make_unique<MapleButton>(mainbar["BtSkill"]);
+
+        place_button(BT_KEYSETTING, mainbar["BtKeysetting"], BT_KEYSETTING_POS);
 
         update_layout_position();
     }
@@ -169,8 +183,15 @@ namespace jrc
         case BT_SKILL:
             UI::get().send_menu(KeyAction::SKILLBOOK);
             return Button::NORMAL;
+        case BT_KEYSETTING:
+            UI::get().send_menu(KeyAction::KEYCONFIG);
+            return Button::NORMAL;
         default:
-            return Button::PRESSED;
+            // Nothing is wired to these yet, but they still have to settle back
+            // to a resting state. Returning PRESSED would leave them stuck in
+            // that artwork, since the shared click handling only ever clears a
+            // hover, never a press.
+            return Button::NORMAL;
         }
     }
 
