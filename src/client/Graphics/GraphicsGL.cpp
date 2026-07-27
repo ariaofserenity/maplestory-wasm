@@ -84,7 +84,12 @@ namespace jrc
             "void main(void) {"
             "    if (texpos.y == 0.0) {"
             "        gl_FragColor = colormod;"
-            "    } else if (texpos.y <= float(fontregion)) {"
+            // Glyphs occupy rows 1 up to but not including fontregion, which is
+            // where the ordinary textures start. Including that row here made
+            // the first one of those render through the glyph path, which keeps
+            // only the red channel as alpha: pale bitmaps survived as white
+            // while dark ones, such as the fill behind a tooltip, vanished.
+            "    } else if (texpos.y < float(fontregion)) {"
             "        gl_FragColor = vec4(1.0, 1.0, 1.0, texture2D(texture, texpos / atlassize).r) * colormod;"
             "    } else {"
             "        gl_FragColor = texture2D(texture, texpos / atlassize) * colormod;"
@@ -921,12 +926,17 @@ namespace jrc
         glVertexAttribPointer(attribute_coord, 4, GL_SHORT, GL_FALSE, sizeof(Quad::Vertex), 0);
         glVertexAttribPointer(attribute_color, 4, GL_FLOAT, GL_FALSE, sizeof(Quad::Vertex), (const void*)8);
 #ifdef MS_PLATFORM_WASM
-        // Initialize indices for GL_TRIANGLES (2 triangles per quad, 6 indices per quad)
-        std::vector<GLushort> indices;
+        // Initialize indices for GL_TRIANGLES (2 triangles per quad, 6 indices per quad).
+        // These have to be 32 bit: a scene is easily more than the 16384 quads
+        // whose last vertex still fits in 16 bits, and frames built from single
+        // pixel tiles spend hundreds of quads each. Narrower indices silently
+        // wrap at that point and everything past it is drawn from whatever
+        // geometry sits at the start of the buffer instead of its own.
+        std::vector<GLuint> indices;
         indices.reserve(quads.size() * 6);
         for (size_t i = 0; i < quads.size(); ++i)
         {
-            GLushort base = static_cast<GLushort>(i * 4);
+            GLuint base = static_cast<GLuint>(i * 4);
             indices.push_back(base + 0);
             indices.push_back(base + 1);
             indices.push_back(base + 2);
@@ -936,8 +946,8 @@ namespace jrc
         }
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STREAM_DRAW);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_SHORT, 0);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STREAM_DRAW);
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 #else
         GLsizei fsize = static_cast<GLsizei>(quads.size() * Quad::LENGTH);

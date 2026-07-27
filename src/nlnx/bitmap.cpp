@@ -50,15 +50,30 @@ namespace nl
 		if (l + 0x20 > bitmap_buf.size())
 			bitmap_buf.resize(l + 0x20);
 
-		uint64_t data_offset = m_offset + 4;
-
-		uint32_t read_len = l;
-		std::vector<char> src_buf(read_len);
-
-		if (!io_read(fd, src_buf.data(), read_len, data_offset))
+		// The compressed length is stored in the four bytes ahead of the data.
+		// Taking the uncompressed length instead happens to work whenever
+		// compression saves space, but tiny bitmaps grow: a single pixel is four
+		// bytes that lz4 stores as five, so the last literal, the alpha byte,
+		// was read from past the end of the buffer.
+		uint32_t compressed_len = 0;
+		if (!io_read(fd, &compressed_len, sizeof(compressed_len), m_offset))
 			return nullptr;
 
-		::LZ4_decompress_fast(src_buf.data(), bitmap_buf.data(), static_cast<int>(l));
+		if (compressed_len == 0)
+			return nullptr;
+
+		std::vector<char> src_buf(compressed_len);
+
+		if (!io_read(fd, src_buf.data(), compressed_len, m_offset + 4))
+			return nullptr;
+
+		// Bounded against both lengths, so a short or damaged block fails rather
+		// than reading beyond the input the way the unchecked variant does.
+		if (::LZ4_decompress_safe(src_buf.data(), bitmap_buf.data(),
+		                          static_cast<int>(compressed_len),
+		                          static_cast<int>(l)) < 0)
+			return nullptr;
+
 		return bitmap_buf.data();
 	}
 	uint16_t bitmap::width() const
