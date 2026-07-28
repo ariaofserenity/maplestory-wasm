@@ -42,6 +42,7 @@ namespace jrc
                      int8_t pic);
 
         void draw(float alpha) const override;
+        void draw_background() const;
         void update() override;
         Button::State button_pressed(uint16_t id) override;
 
@@ -83,11 +84,18 @@ namespace jrc
             BT_CHAR0
         };
 
-        static constexpr uint8_t PAGESIZE = 8;
+        // Slots shown at once. The page buttons step by this, so the next set
+        // of characters appears in the same places as the previous one.
+        static constexpr uint8_t PAGESIZE = 3;
 
         Sprite emptyslot;
         Charset levelset;
         nl::node nametag;
+        // Drifting sky backdrop. Both are only loaded for the artwork variant
+        // that has them, so an unset texture simply draws nothing.
+        Texture sky;
+        Texture cloud;
+        float cloudfx;
 
         Point<int16_t> selworldpos;
         Point<int16_t> charinfopos;

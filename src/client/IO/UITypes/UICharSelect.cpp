@@ -59,11 +59,22 @@ namespace jrc
         nl::node common     = nl::nx::ui["Login.img"]["Common"];
         nl::node charselect = nl::nx::ui["Login.img"]["CharSelect"];
 
+        cloudfx = 200.0f;
+
         // Compatibility: base login background exists across more UI.nx variants
         // than Title/worldsel.
         if (back["11"])
         {
-            sprites.emplace_back(back["11"], Point<int16_t>(370, 300));
+            // Only this artwork variant has the drifting backdrop. Both are
+            // drawn each frame from draw() rather than registered as sprites,
+            // because the cloud moves and has to stay above the sky and below
+            // everything else.
+            sky = back["2"];
+            cloud = back["27"];
+
+            sprites.emplace_back(back["13"], Point<int16_t>(201, 680));
+            sprites.emplace_back(back["14"], Point<int16_t>(375, 376));
+            sprites.emplace_back(back["15"], Point<int16_t>(203, 66));
         }
         else if (back["0"])
         {
@@ -94,13 +105,13 @@ namespace jrc
         */
 
         // Pre BB
-        charinfopos = Point<int16_t>(662, 305);
-        selworldpos = Point<int16_t>(578, 112);
+        charinfopos = Point<int16_t>(682, 325);
+        selworldpos = Point<int16_t>(598, 132);
 
         sprites.emplace_back(charselect["charInfo"],                        charinfopos);
         sprites.emplace_back(common["selectWorld"],                         selworldpos);
-        sprites.emplace_back(charselect["selectedWorld"]["icon"]["15"],     selworldpos);
-        sprites.emplace_back(charselect["selectedWorld"]["name"]["15"],     selworldpos);
+        sprites.emplace_back(charselect["selectedWorld"]["icon"]["0"],     selworldpos);
+        sprites.emplace_back(charselect["selectedWorld"]["name"]["0"],     selworldpos);
         sprites.emplace_back(charselect["selectedWorld"]["ch"][channel_id], selworldpos);
 
         emptyslot = charselect["buyCharacter"];
@@ -112,11 +123,21 @@ namespace jrc
         buttons[BT_PAGELEFT]   = std::make_unique<MapleButton>(charselect["pageL"],    Point<int16_t>(100, 490));
         buttons[BT_PAGERIGHT]  = std::make_unique<MapleButton>(charselect["pageR"],    Point<int16_t>(490, 490));
 
+        // A character look is positioned by its feet, so the box that selects it
+        // covers the body: half a box either side of that point, and one box tall
+        // ending on it. Taken from get_char_pos rather than repeated, so moving
+        // the characters moves what selects them.
+        constexpr Point<int16_t> CHAR_HITBOX_SIZE = { 50, 80 };
+        constexpr Point<int16_t> CHAR_HITBOX_OFFSET = {
+            -CHAR_HITBOX_SIZE.x() / 2,
+            -CHAR_HITBOX_SIZE.y()
+        };
+
         for (uint8_t i = 0; i < PAGESIZE; ++i)
         {
             buttons[BT_CHAR0 + i] = std::make_unique<AreaButton>(
-                Point<int16_t>(105 + (120 * (i % 4)), 170 + (200 * (i > 3))),
-                Point<int16_t>(50, 80)
+                get_char_pos(i) + CHAR_HITBOX_OFFSET,
+                CHAR_HITBOX_SIZE
             );
         }
 
@@ -142,8 +163,40 @@ namespace jrc
         active    = true;
     }
 
+    void UICharSelect::draw_background() const
+    {
+        // One column of sky repeated across the screen. The artwork is already
+        // as tall as the view, so a single row covers it. Its origin sits at the
+        // middle of the tile, and a position names where that origin lands, so
+        // the offset has to be added back in or each tile is drawn half a tile
+        // left of where it belongs and the right edge is left bare.
+        int16_t tile_width = sky.width();
+        if (tile_width > 0)
+        {
+            Point<int16_t> origin = sky.get_origin();
+
+            for (int16_t k = 0; k < Constants::viewwidth(); k += tile_width)
+            {
+                sky.draw(Point<int16_t>(k + origin.x(), origin.y()));
+            }
+        }
+
+        // Three copies side by side, so the one leaving the screen is replaced
+        // by the one entering it and the drift never shows a seam.
+        int16_t cloud_width = cloud.width();
+        if (cloud_width > 0)
+        {
+            int16_t cloudx = static_cast<int16_t>(cloudfx) % Constants::viewwidth();
+            cloud.draw(Point<int16_t>(cloudx - cloud_width, 300));
+            cloud.draw(Point<int16_t>(cloudx, 300));
+            cloud.draw(Point<int16_t>(cloudx + cloud_width, 300));
+        }
+    }
+
     void UICharSelect::draw(float alpha) const
     {
+        draw_background();
+
         UIElement::draw(alpha);
 
         for (uint8_t i = 0; i < charcount_relative; ++i)
@@ -173,8 +226,7 @@ namespace jrc
 
         for (uint8_t i = charcount_relative; i < slots_relative; ++i)
         {
-            Point<int16_t> position_slot(130 + (120 * (i % 4)), 250 + (200 * (i > 3)));
-            emptyslot.draw(position_slot, alpha);
+            emptyslot.draw(get_char_pos(i), alpha);
         }
     }
 
@@ -188,6 +240,8 @@ namespace jrc
         {
             chit.update(Constants::TIMESTEP);
         }
+
+        cloudfx += 0.25f;
     }
 
     Button::State UICharSelect::button_pressed(uint16_t bid)
@@ -264,7 +318,14 @@ namespace jrc
             buttons[BT_PAGELEFT]->set_state(Button::DISABLED);
         }
 
-        if (page < slots_absolute / PAGESIZE)
+        // Index of the last page that holds anything. Dividing the slot count
+        // alone would offer one page too many whenever the slots divide evenly,
+        // landing on a page with nothing on it.
+        uint8_t last_page = slots_absolute > 0
+            ? static_cast<uint8_t>((slots_absolute - 1) / PAGESIZE)
+            : 0;
+
+        if (page < last_page)
         {
             buttons[BT_PAGERIGHT]->set_state(Button::NORMAL);
         }
@@ -574,8 +635,15 @@ namespace jrc
 
     Point<int16_t> UICharSelect::get_char_pos(size_t i) const
     {
-        int16_t x = 130 + (120 * (i % 4));
-        int16_t y = 250 + (200 * (i > 3));
-        return { x, y };
+        // A single row of PAGESIZE slots. Paging swaps which characters occupy
+        // them rather than moving them, so only the column varies here.
+        constexpr int16_t ROW_X = 250;
+        constexpr int16_t ROW_Y = 362;
+        constexpr int16_t COLUMN_STEP = 120;
+
+        return {
+            static_cast<int16_t>(ROW_X + COLUMN_STEP * static_cast<int16_t>(i)),
+            ROW_Y
+        };
     }
 }

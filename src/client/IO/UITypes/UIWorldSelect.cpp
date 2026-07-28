@@ -53,11 +53,11 @@ namespace jrc
 
         const World& world = worlds.front();
 
-        buttons[BT_WORLD0] = std::make_unique<MapleButton>(worldsrc["button:15"], Point<int16_t>(650, 20));
+        buttons[BT_WORLD0] = std::make_unique<MapleButton>(worldsrc["button:0"], Point<int16_t>(650, 45));
         buttons[BT_WORLD0]->set_state(Button::PRESSED);
 
         sprites.emplace_back(channelsrc["layer:bg"], Point<int16_t>(200, 170));
-        sprites.emplace_back(channelsrc["release"]["layer:15"], Point<int16_t>(200, 170));
+        sprites.emplace_back(channelsrc["release"]["layer:0"], Point<int16_t>(200, 170));
 
         if (channelid >= world.channelcount)
             channelid = 0;
