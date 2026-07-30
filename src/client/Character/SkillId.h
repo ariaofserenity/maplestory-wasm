@@ -57,7 +57,7 @@ namespace jrc
             SWORD_PANIC = 1111003,
             AXE_PANIC = 1111004,
             SWORD_COMA = 1111005,
-            AXE_COMA = 1111005,
+            AXE_COMA = 1111006,
             SHOUT = 1111008,
 
             // Hero
@@ -151,8 +151,17 @@ namespace jrc
             // Priest
             PRIEST_TELEPORT = 2301001,
 
+            // Bowman
+            ARROW_BLOW = 3001004,
+
             // Hunter
             BOW_MASTERY = 3100000,
+            ARROW_BOMB = 3101005,
+
+            // Ranger
+            INFERNO = 3111003,
+            ARROW_RAIN = 3111004,
+            STRAFE = 3111006,
 
             // Crossbowman
             CROSSBOW_MASTERY = 3200000,

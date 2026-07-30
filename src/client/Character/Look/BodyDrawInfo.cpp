@@ -179,6 +179,12 @@ namespace jrc
         return 0;
     }
 
+    size_t BodyDrawinfo::get_attackframecount(std::string action) const
+    {
+        auto action_iter = attack_delays.find(action);
+        return (action_iter != attack_delays.end()) ? action_iter->second.size() : 0;
+    }
+
     uint8_t BodyDrawinfo::next_actionframe(std::string action, uint8_t frame) const
     {
         auto action_iter = body_actions.find(action);

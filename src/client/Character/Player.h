@@ -39,6 +39,8 @@
 
 #include "../Util/Randomizer.h"
 
+#include <unordered_map>
+
 
 namespace jrc
 {

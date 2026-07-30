@@ -20,7 +20,7 @@
 #include "../../Character/SkillId.h"
 #include "../../Gameplay/Stage.h"
 
-#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace jrc
@@ -61,13 +61,17 @@ namespace jrc
 
             recv.skip(1);
 
+            // Each oid appears exactly once in the packet, so one entry per
+            // iteration preserves the order the attacker resolved its targets in.
+            auto& lines = attack.damagelines.emplace_back(
+                oid, std::vector<std::pair<int32_t, bool>>{}).second;
+
             uint8_t length = (attack.skill == SkillId::MESO_EXPLOSION) ? recv.read_byte() : attack.hitcount;
             for (uint8_t j = 0; j < length; j++)
             {
                 int32_t damage = recv.read_int();
                 bool critical = false; // todo
-                auto singledamage = std::make_pair(damage, critical);
-                attack.damagelines[oid].push_back(singledamage);
+                lines.emplace_back(damage, critical);
             }
         }
 

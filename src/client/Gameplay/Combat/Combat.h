@@ -17,6 +17,7 @@
 //////////////////////////////////////////////////////////////////////////////
 #pragma once
 #include "Attack.h"
+#include "MovingEffect.h"
 #include "RegularAttack.h"
 #include "Skill.h"
 
@@ -26,6 +27,8 @@
 
 #include "../../Character/Player.h"
 #include "../../Template/TimedQueue.h"
+
+#include <unordered_map>
 
 namespace jrc
 {
@@ -63,6 +66,20 @@ namespace jrc
             int32_t move_id;
         };
 
+        // A single area-skill animation waiting to appear.
+        struct SpecialEffect
+        {
+            int32_t user_oid;
+            Animation animation;
+            // World position the effect was cast at, so it stays put if the
+            // caster walks away mid-cast.
+            Point<int16_t> origin;
+            Point<int16_t> travel;
+            uint16_t duration;
+            int8_t z;
+            bool flip;
+        };
+
         struct BulletEffect
         {
             DamageEffect damageeffect;
@@ -76,6 +93,7 @@ namespace jrc
         void apply_result_movement(const SpecialMove& move, const AttackResult& result);
         void apply_rush(const AttackResult& result);
         void apply_bullet_effect(const BulletEffect& effect);
+        void apply_special_effect(const SpecialEffect& effect);
         void apply_damage_effect(const DamageEffect& effect);
         void extract_effects(const Char& user, const SpecialMove& move, const AttackResult& result);
         std::vector<DamageNumber> place_numbers(int32_t oid, const std::vector<std::pair<int32_t, bool>>& damagelines);
@@ -99,8 +117,10 @@ namespace jrc
         TimedQueue<AttackResult> attackresults;
         TimedQueue<BulletEffect> bulleteffects;
         TimedQueue<DamageEffect> damageeffects;
+        TimedQueue<SpecialEffect> specialeffects;
 
         std::list<BulletEffect> bullets;
+        std::list<MovingEffect> movingeffects;
         std::list<DamageNumber> damagenumbers;
     };
 }

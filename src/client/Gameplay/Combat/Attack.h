@@ -19,8 +19,8 @@
 #include "../../Template/Rectangle.h"
 
 #include <cstdint>
+#include <utility>
 #include <vector>
-#include <unordered_map>
 
 
 namespace jrc
@@ -135,9 +135,13 @@ namespace jrc
         uint8_t stance   = 0;
         uint8_t speed    = 0;
         bool toleft      = false;
-        std::unordered_map<int32_t, std::vector<std::pair<int32_t, bool>>> damagelines;
-        int32_t first_oid;
-        int32_t last_oid;
+        // Damage lines per target, in the order the targets were selected
+        // (nearest first). Ordering is load-bearing: multi-target skills
+        // stagger their hits outward from the attacker, so an unordered
+        // container would randomise the visual sweep.
+        std::vector<std::pair<int32_t, std::vector<std::pair<int32_t, bool>>>> damagelines;
+        int32_t first_oid = 0;
+        int32_t last_oid  = 0;
     };
 
     struct AttackUser

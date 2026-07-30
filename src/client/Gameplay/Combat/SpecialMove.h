@@ -17,6 +17,7 @@
 //////////////////////////////////////////////////////////////////////////////
 #pragma once
 #include "Attack.h"
+#include "SkillSpecialEffect.h"
 
 #include "../MapleMap/Mob.h"
 
@@ -47,6 +48,24 @@ namespace jrc
         virtual void apply_stats(const Char& user, Attack& attack) const = 0;
         virtual void apply_hiteffects(const AttackUser& user, Mob& target) const = 0;
         virtual Animation get_bullet(const Char& user, int32_t bulletid) const = 0;
+
+        // Animations shown over the area a move affects. Most moves have none.
+        virtual std::vector<SpecialSpawn> get_special_spawns(const Char&) const
+        {
+            return {};
+        }
+        // Extra delay before this move's damage registers, for moves whose
+        // effect lands some time after the cast.
+        virtual uint16_t get_damage_delay() const
+        {
+            return 0;
+        }
+        // Whether the move replaces the equipped projectile with its own
+        // area animation instead of throwing it.
+        virtual bool suppresses_bullet() const
+        {
+            return false;
+        }
 
         virtual bool is_attack() const = 0;
         virtual bool is_skill() const = 0;

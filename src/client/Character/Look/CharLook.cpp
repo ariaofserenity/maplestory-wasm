@@ -623,6 +623,13 @@ namespace jrc
         }
     }
 
+    size_t CharLook::get_attackframecount() const
+    {
+        // Only named skill actions carry per-frame hit markers; a plain stance
+        // exposes a single delay, so report one frame for it.
+        return action ? drawinfo.get_attackframecount(actionstr) : 1;
+    }
+
     uint8_t CharLook::get_frame() const
     {
         return stframe.get();

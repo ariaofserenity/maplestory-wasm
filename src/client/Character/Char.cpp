@@ -149,6 +149,20 @@ namespace jrc
         return static_cast<uint16_t>(delay / fspeed);
     }
 
+    uint16_t Char::get_attackdelay(size_t no, size_t total_hits) const
+    {
+        // An action usually marks more hittable frames than the skill has hits
+        // (Brandish: five frames, two hits), so asking for indices 0..n-1 packs
+        // every hit into the opening of the swing. Spread them over the whole
+        // action instead, one per visible strike.
+        size_t frames = look.get_attackframecount();
+        if (frames > 1 && total_hits > 1 && total_hits <= frames)
+        {
+            return get_attackdelay(no * (frames - 1) / (total_hits - 1));
+        }
+        return get_attackdelay(no);
+    }
+
     int8_t Char::update(const Physics& physics)
     {
         update(physics, 1.0f);
@@ -164,6 +178,12 @@ namespace jrc
     {
         float attackspeed = get_real_attackspeed();
         effects.add(toshow, { flip }, z, attackspeed);
+    }
+
+    void Char::show_attack_effect(Animation toshow, int8_t z, Point<int16_t> offset)
+    {
+        float attackspeed = get_real_attackspeed();
+        effects.add(toshow, { offset, flip }, z, attackspeed);
     }
 
     void Char::show_effect_id(CharEffect::Id toshow)

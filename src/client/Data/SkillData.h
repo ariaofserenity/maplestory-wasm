@@ -60,14 +60,6 @@ namespace jrc
                 hrange(hrange), range(range) {}
         };
 
-        // Skill flags, unfortunately these just have to be hardcoded
-        enum Flags
-        {
-            NONE = 0x0000,
-            ATTACK = 0x0001,
-            RANGED = 0x0002
-        };
-
         // Icon types
         enum Icon
         {
@@ -109,14 +101,11 @@ namespace jrc
         // Load a skill from the game files.
         SkillData(int32_t id);
 
-        // Get some hardcoded information.
-        int32_t flags_of(int32_t id) const;
-
         std::unordered_map<int32_t, Stats> stats;
         std::string element;
         Weapon::Type reqweapon;
         int32_t masterlevel;
-        int32_t flags;
+        bool attacking;
         bool passive;
         bool invisible;
 

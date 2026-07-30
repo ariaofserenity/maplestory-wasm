@@ -64,6 +64,9 @@ namespace jrc
         float get_real_attackspeed() const;
         /// Return the delay until applying an attack.
         uint16_t get_attackdelay(size_t no) const;
+        // Delay for hit 'no' of a move landing 'total_hits' hits, spread across
+        // the action's attack frames.
+        uint16_t get_attackdelay(size_t no, size_t total_hits) const;
 
         /// Set if the character sprite is mirrored (true = facing left)
         virtual void set_direction(bool flipped);
@@ -82,6 +85,8 @@ namespace jrc
 
         /// Display an animation as an effect with the character.
         void show_attack_effect(Animation animation, int8_t z);
+        // Same, offset from the character - used for area skill animations.
+        void show_attack_effect(Animation animation, int8_t z, Point<int16_t> offset);
         /// Display an animation as an effect ontop of the character.
         void show_effect_id(CharEffect::Id toshow);
         /// Display the iron body skill animation.

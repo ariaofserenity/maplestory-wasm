@@ -39,6 +39,21 @@ namespace jrc
         constexpr int16_t TELEPORT_STEP = 8;
         // Max ground-height delta (px) before treating a step as a wall.
         constexpr int16_t TELEPORT_WALL_THRESHOLD = 35;
+
+        // Multi-target skills resolve their targets in sequence rather than on
+        // a single frame. No WZ field encodes this cadence, so the step is a
+        // tuned constant.
+        constexpr uint16_t TARGET_STAGGER_MS = 75;
+
+        // Delay before a given target is hit. Divided by the attack speed
+        // factor for the same reason Char::get_attackdelay is, so that faster
+        // weapons sweep their targets proportionally faster.
+        uint16_t target_stagger(const Char& user, size_t target_index)
+        {
+            return static_cast<uint16_t>(
+                target_index * TARGET_STAGGER_MS / user.get_real_attackspeed()
+            );
+        }
     }
 
     Combat::Combat(Player& in_player,
@@ -56,6 +71,9 @@ namespace jrc
         }),
         damageeffects([&](const DamageEffect& effect) {
             apply_damage_effect(effect);
+        }),
+        specialeffects([&](const SpecialEffect& effect) {
+            apply_special_effect(effect);
         }) {}
 
     void Combat::draw(double viewx, double viewy, float alpha) const
@@ -63,6 +81,10 @@ namespace jrc
         for (auto& be : bullets)
         {
             be.bullet.draw(viewx, viewy, alpha);
+        }
+        for (auto& me : movingeffects)
+        {
+            me.draw(viewx, viewy, alpha);
         }
         for (auto& dn : damagenumbers)
         {
@@ -78,6 +100,7 @@ namespace jrc
         attackresults.update();
         bulleteffects.update();
         damageeffects.update();
+        specialeffects.update();
 
         bullets.remove_if([&](BulletEffect& mb) {
             int32_t target_oid = mb.damageeffect.target_oid;
@@ -96,6 +119,9 @@ namespace jrc
                 return mb.bullet.update(mb.target);
             }
         });
+        movingeffects.remove_if([](MovingEffect& me) {
+            return me.update();
+        });
         damagenumbers.remove_if([](DamageNumber& dn) {
             return dn.update();
         });
@@ -104,6 +130,8 @@ namespace jrc
     void Combat::clear()
     {
         teleport_cooldown = 0;
+        // Map-anchored effects mean nothing on the next map.
+        movingeffects.clear();
     }
 
     bool Combat::use_move(int32_t move_id)
@@ -341,6 +369,29 @@ namespace jrc
         }
     }
 
+    void Combat::apply_special_effect(const SpecialEffect& effect)
+    {
+        if (effect.travel.x() != 0 || effect.travel.y() != 0)
+        {
+            // Travelling copies are anchored to the map, not the caster, so
+            // they play out where the skill was aimed.
+            movingeffects.emplace_back(
+                effect.animation, effect.origin, effect.travel,
+                effect.duration, effect.flip
+            );
+            return;
+        }
+
+        if (effect.user_oid == player.get_oid())
+        {
+            player.show_attack_effect(effect.animation, effect.z, effect.origin);
+        }
+        else if (Optional<OtherChar> ouser = chars.get_char(effect.user_oid))
+        {
+            ouser->show_attack_effect(effect.animation, effect.z, effect.origin);
+        }
+    }
+
     void Combat::apply_damage_effect(const DamageEffect& effect)
     {
         Point<int16_t> body_position = mobs.get_mob_body_position(effect.target_oid);
@@ -390,10 +441,38 @@ namespace jrc
             user.is_twohanded(),
             !result.toleft
         };
+        // Area skills paint their animation over the ground they cover; this
+        // runs for both branches below since it is independent of whether the
+        // move also throws a projectile.
+        for (const SpecialSpawn& spawn : move.get_special_spawns(user))
+        {
+            // The drift is stored as a forward distance; aim it at the side
+            // the caster is facing.
+            Point<int16_t> travel = spawn.travel;
+            if (result.toleft)
+                travel = { static_cast<int16_t>(-travel.x()), travel.y() };
+
+            bool travels = travel.x() != 0 || travel.y() != 0;
+            // Travelling copies need a map position; stationary ones are drawn
+            // relative to the character and take the raw offset.
+            Point<int16_t> origin = travels
+                ? user.get_position() + spawn.offset
+                : spawn.offset;
+
+            specialeffects.emplace(
+                spawn.delay, user.get_oid(), spawn.animation, origin,
+                travel, spawn.duration, spawn.z, !result.toleft
+            );
+        }
+
+        // Skills whose effect arrives late (arrows still falling) must not show
+        // their damage while the caster is mid-animation.
+        const uint16_t damage_delay = move.get_damage_delay();
+
         if (result.bullet)
         {
-            auto bullet_delay = [&](size_t index) {
-                uint16_t delay = user.get_attackdelay(index);
+            auto bullet_delay = [&](size_t index, size_t count) {
+                uint16_t delay = user.get_attackdelay(index, count);
                 if (index > 0 && delay == 0)
                 {
                     // Regular ranged stances often expose only one attack frame.
@@ -409,6 +488,7 @@ namespace jrc
                 return base + Point<int16_t>(0, spread - center);
             };
 
+            size_t target_index = 0;
             for (auto& line : result.damagelines)
             {
                 int32_t oid = line.first;
@@ -416,6 +496,7 @@ namespace jrc
                 {
                     std::vector<DamageNumber> numbers = place_numbers(oid, line.second);
                     Point<int16_t> target = mobs.get_mob_body_position(oid);
+                    uint16_t stagger = target_stagger(user, target_index);
 
                     size_t i = 0;
                     for (auto& number : numbers)
@@ -434,7 +515,7 @@ namespace jrc
                             result.toleft
                         };
                         bulleteffects.emplace(
-                            bullet_delay(i),
+                            bullet_delay(i, numbers.size()) + stagger + damage_delay,
                             std::move(effect),
                             bullet,
                             bullet_target(target, i, numbers.size())
@@ -442,6 +523,7 @@ namespace jrc
                         i++;
                     }
                 }
+                target_index++;
             }
 
             if (result.damagelines.empty())
@@ -464,7 +546,7 @@ namespace jrc
                         result.toleft
                     };
                     bulleteffects.emplace(
-                        bullet_delay(i),
+                        bullet_delay(i, result.hitcount) + damage_delay,
                         std::move(effect),
                         bullet,
                         bullet_target(target, i, result.hitcount)
@@ -474,6 +556,7 @@ namespace jrc
         }
         else
         {
+            size_t target_index = 0;
             for (auto& line : result.damagelines)
             {
                 int32_t oid = line.first;
@@ -481,11 +564,15 @@ namespace jrc
                 {
                     std::vector<DamageNumber> numbers = place_numbers(oid, line.second);
 
+                    // Each successive target lands a step later, so the hits
+                    // cascade outwards instead of all popping on one frame.
+                    uint16_t stagger = target_stagger(user, target_index);
+
                     size_t i = 0;
                     for (auto& number : numbers)
                     {
                         damageeffects.emplace(
-                            user.get_attackdelay(i),
+                            user.get_attackdelay(i, numbers.size()) + stagger + damage_delay,
                             attackuser,
                             number,
                             line.second[i].first,
@@ -497,6 +584,7 @@ namespace jrc
                         i++;
                     }
                 }
+                target_index++;
             }
         }
     }

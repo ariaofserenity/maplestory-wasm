@@ -23,6 +23,7 @@
 #include "SkillSound.h"
 #include "SkillHitEffect.h"
 #include "SkillUseEffect.h"
+#include "SkillSpecialEffect.h"
 
 #include <memory>
 
@@ -39,6 +40,9 @@ namespace jrc
         void apply_stats(const Char& user, Attack& attack) const override;
         void apply_hiteffects(const AttackUser& user, Mob& target) const override;
         Animation get_bullet(const Char& user, int32_t bulletid) const override;
+        std::vector<SpecialSpawn> get_special_spawns(const Char& user) const override;
+        uint16_t get_damage_delay() const override;
+        bool suppresses_bullet() const override;
 
         bool is_attack() const override;
         bool is_skill() const override;
@@ -53,9 +57,11 @@ namespace jrc
         std::unique_ptr<SkillSound> sound;
         std::unique_ptr<SkillUseEffect> useeffect;
         std::unique_ptr<SkillHitEffect> hiteffect;
+        std::unique_ptr<SkillSpecialEffect> special;
 
         int32_t skillid;
         bool overregular;
         bool projectile;
+        bool suppressbullet;
     };
 }

@@ -17,7 +17,6 @@
 //////////////////////////////////////////////////////////////////////////////
 #include "SkillData.h"
 
-#include "../Character/SkillId.h"
 #include "../Util/Misc.h"
 
 #include <unordered_set>
@@ -27,6 +26,33 @@
 
 namespace jrc
 {
+    namespace
+    {
+        // Skills whose level data carries a damage field but which are not
+        // direct attacks: buffs that grant magic attack, and persistent area
+        // skills the client has no support for yet.
+        //
+        // Listing the exceptions instead of the rule matters. A skill missing
+        // from this set still behaves as a plain attack, which is wrong but
+        // visible; a skill missing from a whitelist does nothing at all, which
+        // is how ~135 skills came to be silently dead.
+        bool is_not_direct_attack(int32_t id)
+        {
+            static const std::unordered_set<int32_t> exceptions = {
+                2101001,  // Meditation (F/P)
+                2201001,  // Meditation (I/L)
+                12101000, // Meditation (Flame Wizard)
+                9101003,  // Bless (GM)
+                13101006, // Wind Walk
+                2111003,  // Poison Mist
+                12111005, // Flame Gear
+                4121004,  // Ninja Ambush (Hermit)
+                4221004   // Ninja Ambush (Night Lord)
+            };
+            return exceptions.count(id) > 0;
+        }
+    }
+
     SkillData::SkillData(int32_t id)
     {
         // Locate sources
@@ -50,9 +76,17 @@ namespace jrc
 
 
         // Load stats
+        bool deals_damage = false;
         nl::node levelsrc = src["level"];
         for (auto sub : levelsrc)
         {
+            // The level data is the authority on whether a skill is offensive:
+            // anything that specifies damage output attacks. Deriving this beats
+            // a hand-kept id table, which silently disables every skill nobody
+            // remembered to add and cannot be verified against the game files.
+            if (sub["damage"] || sub["mad"] || sub["fixdamage"])
+                deals_damage = true;
+
             float damage = (float)sub["damage"] / 100;
             int32_t matk = sub["mad"];
             int32_t fixdamage = sub["fixdamage"];
@@ -81,81 +115,13 @@ namespace jrc
         reqweapon = Weapon::by_value(100 + (int32_t)src["weapon"]);
         masterlevel = static_cast<int32_t>(stats.size());
         passive = (id % 10000) / 1000 == 0;
-        flags = flags_of(id);
+        // A summon node means the damage belongs to the summoned creature, not
+        // to a swing the player makes, so those are not direct attacks either.
+        attacking = !passive
+            && deals_damage
+            && !src["summon"]
+            && !is_not_direct_attack(id);
         invisible = src["invisible"].get_bool();
-    }
-
-    int32_t SkillData::flags_of(int32_t id) const
-    {
-        static const std::unordered_map<int32_t, int32_t> skill_flags =
-        {
-            // Beginner
-            { SkillId::THREE_SNAILS, ATTACK },
-            // Warrior
-            { SkillId::POWER_STRIKE, ATTACK },
-            { SkillId::SLASH_BLAST, ATTACK },
-            // Fighter
-            // Page
-            // Crusader
-            { SkillId::SWORD_PANIC, ATTACK },
-            { SkillId::AXE_PANIC, ATTACK },
-            { SkillId::SWORD_COMA, ATTACK },
-            { SkillId::AXE_COMA, ATTACK },
-            // Hero
-            { SkillId::RUSH_HERO, ATTACK },
-            { SkillId::BRANDISH, ATTACK },
-            // Page
-            // White Knight
-            { SkillId::CHARGE, ATTACK },
-            // Paladin
-            { SkillId::RUSH_PALADIN, ATTACK },
-            { SkillId::BLAST, ATTACK },
-            { SkillId::HEAVENS_HAMMER, ATTACK },
-            // Spearman
-            // Dragon Knight
-            { SkillId::DRAGON_BUSTER, ATTACK },
-            { SkillId::DRAGON_FURY, ATTACK },
-            { SkillId::PA_BUSTER, ATTACK },
-            { SkillId::PA_FURY, ATTACK },
-            { SkillId::SACRIFICE, ATTACK },
-            { SkillId::DRAGONS_ROAR, ATTACK },
-            // Dark Knight
-            { SkillId::RUSH_DK, ATTACK },
-            // Mage
-            { SkillId::ENERGY_BOLT, ATTACK | RANGED },
-            { SkillId::MAGIC_CLAW, ATTACK | RANGED },
-            // F/P Mage
-            { SkillId::SLOW_FP, ATTACK },
-            { SkillId::FIRE_ARROW, ATTACK | RANGED },
-            { SkillId::POISON_BREATH, ATTACK | RANGED },
-            // F/P ArchMage
-            { SkillId::EXPLOSION, ATTACK },
-            { SkillId::POISON_BREATH, ATTACK },
-            { SkillId::SEAL_FP, ATTACK },
-            { SkillId::ELEMENT_COMPOSITION_FP, ATTACK | RANGED },
-            //
-            { SkillId::FIRE_DEMON, ATTACK },
-            { SkillId::PARALYZE, ATTACK | RANGED },
-            { SkillId::METEOR_SHOWER, ATTACK },
-            // Rogue
-            { SkillId::DISORDER, ATTACK },
-            { SkillId::LUCKY_SEVEN, ATTACK | RANGED },
-            // Hermit / Night Lord
-            { SkillId::DRAIN, ATTACK },
-            { SkillId::AVENGER, ATTACK | RANGED },
-            { SkillId::TRIPLE_THROW, ATTACK | RANGED },
-            // Chief Bandit / Shadower
-            { SkillId::ASSAULTER, ATTACK },
-            { SkillId::BAND_OF_THIEVES, ATTACK },
-            { SkillId::ASSASSINATE, ATTACK },
-            { SkillId::BOOMERANG_STEP, ATTACK }
-        };
-
-        auto iter = skill_flags.find(id);
-        if (iter == skill_flags.end())
-            return NONE;
-
-        return iter->second;
     }
 
     bool SkillData::is_passive() const
@@ -165,7 +131,7 @@ namespace jrc
 
     bool SkillData::is_attack() const
     {
-        return !passive && (flags & ATTACK);
+        return attacking;
     }
 
     bool SkillData::is_invisible() const

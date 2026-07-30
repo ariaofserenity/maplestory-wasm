@@ -129,25 +129,25 @@ namespace jrc
             };
         }
 
-        uint8_t mobcount = attack.mobcount;
         AttackResult result = attack;
-        std::vector<int32_t> targets = find_closest(range, origin, mobcount);
-        for (const auto& target : targets)
+        // find_closest returns targets sorted by distance; appending in that
+        // order keeps the sweep running from the attacker outwards.
+        for (int32_t target : find_closest(range, origin, attack.mobcount))
         {
             if (Optional<Mob> mob = mobs.get(target))
             {
-                result.damagelines[target] = mob->calculate_damage(attack);
+                result.damagelines.emplace_back(target, mob->calculate_damage(attack));
                 result.mobcount++;
-
-                if (result.mobcount == 1)
-                {
-                    result.first_oid = target;
-                }
-                if (result.mobcount == mobcount)
-                {
-                    result.last_oid = target;
-                }
             }
+        }
+
+        // Derived from the final list rather than tracked inside the loop, so
+        // last_oid stays valid when fewer mobs are in range than the skill
+        // can hit (Rush reads it to pick its destination).
+        if (!result.damagelines.empty())
+        {
+            result.first_oid = result.damagelines.front().first;
+            result.last_oid  = result.damagelines.back().first;
         }
         return result;
     }

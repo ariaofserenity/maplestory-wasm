@@ -57,6 +57,7 @@ namespace jrc
 
         bool is_twohanded(Stance::Id stance) const;
         uint16_t get_attackdelay(size_t no, uint8_t first_frame) const;
+        size_t get_attackframecount() const;
         uint8_t get_frame() const;
         Stance::Id get_stance() const;
 

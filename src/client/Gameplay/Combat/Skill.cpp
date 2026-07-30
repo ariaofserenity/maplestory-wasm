@@ -159,6 +159,15 @@ namespace jrc
             bullet = std::make_unique<RegularBullet>();
             projectile = false;
         }
+
+        // A special node marks a skill whose damage appears at the target area
+        // rather than travelling from the caster - falling arrows, an eruption,
+        // a blast. Those must not also throw the equipped projectile, which is
+        // what a bow or gun user would otherwise see fly out sideways. Skills
+        // that genuinely throw their ammunition (Lucky Seven, Triple Throw,
+        // Rapid Fire) have no special node and keep the regular bullet.
+        special = std::make_unique<SkillSpecialEffect>(src);
+        suppressbullet = special->is_present();
     }
 
     void Skill::apply_useeffects(Char& user) const
@@ -213,6 +222,11 @@ namespace jrc
         if (!stats.range.empty())
             attack.range = stats.range;
 
+        // Area skills draw their own animation where they land, so the
+        // equipped arrow or bullet must not also be thrown.
+        if (suppressbullet)
+            attack.bullet = 0;
+
         if (projectile && !attack.bullet)
         {
             switch (skillid)
@@ -256,6 +270,27 @@ namespace jrc
     Animation Skill::get_bullet(const Char& user, int32_t bulletid) const
     {
         return bullet->get(user, bulletid);
+    }
+
+    std::vector<SpecialSpawn> Skill::get_special_spawns(const Char& user) const
+    {
+        // Scatter the copies over the ground the skill actually covers. The
+        // rect is stored with the reach on the right edge.
+        int32_t level = user.get_skilllevel(skillid);
+        const SkillData::Stats& stats = SkillData::get(skillid).get_stats(level);
+        int16_t spread_half = stats.range.empty() ? 0 : stats.range.r();
+
+        return special->get_spawns(spread_half);
+    }
+
+    uint16_t Skill::get_damage_delay() const
+    {
+        return special->get_opening();
+    }
+
+    bool Skill::suppresses_bullet() const
+    {
+        return suppressbullet;
     }
 
     bool Skill::is_attack() const

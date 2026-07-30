@@ -104,6 +104,10 @@ namespace jrc
         uint16_t get_delay(Stance::Id stance, uint8_t frame) const;
 
         uint16_t get_attackdelay(std::string action, size_t no) const;
+        // Number of frames in an action that can carry a hit. Actions often
+        // mark more of these than the skill has hits, so callers need the
+        // count to spread hits over the whole swing.
+        size_t get_attackframecount(std::string action) const;
         uint8_t next_actionframe(std::string action, uint8_t frame) const;
         const BodyAction* get_action(std::string action, uint8_t frame) const;
 
