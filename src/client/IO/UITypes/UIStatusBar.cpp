@@ -17,11 +17,14 @@
 //////////////////////////////////////////////////////////////////////////////
 #include "UIStatusBar.h"
 
+#include "UIUserInfo.h"
+
 #include "../UI.h"
 #include "../Components/MapleButton.h"
 
 #include "../../Character/ExpTable.h"
 #include "../../Constants.h"
+#include "../../Gameplay/Stage.h"
 
 #include "nlnx/nx.hpp"
 
@@ -277,6 +280,25 @@ namespace jrc
         return { at, at + Point<int16_t>(BUBBLE_WIDTH, height) };
     }
 
+    void UIStatusbar::open_own_userinfo()
+    {
+        int32_t cid = Stage::get().get_player().get_oid();
+        Optional<UIUserInfo> userinfo = UI::get().get_element<UIUserInfo>();
+
+        // The window is built from the server's answer rather than from what
+        // the client already knows, so all this can do is ask for the dump and
+        // leave the opening to the handler. Only a window already showing the
+        // player is closed again: one showing somebody else is a different
+        // target, which the fresh dump replaces.
+        if (userinfo && userinfo->is_active() && userinfo->get_cid() == cid)
+        {
+            UI::get().remove(UIUserInfo::TYPE);
+            return;
+        }
+
+        Stage::get().request_charinfo(cid);
+    }
+
     void UIStatusbar::set_bubble(Bubble which)
     {
         if (open_bubble == which)
@@ -316,6 +338,9 @@ namespace jrc
     {
         switch (id)
         {
+        case BT_CHARACTER:
+            open_own_userinfo();
+            return Button::NORMAL;
         case BT_STATS:
             UI::get().send_menu(KeyAction::CHARSTATS);
             return Button::NORMAL;

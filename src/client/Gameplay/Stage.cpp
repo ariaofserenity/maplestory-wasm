@@ -489,6 +489,19 @@ namespace jrc
             return;
         }
 
+        request_charinfo(cid);
+    }
+
+    void Stage::request_charinfo(int32_t cid)
+    {
+        // The server resolves the id against the map the player is standing
+        // on, so a lookup made while changing maps would be answered for
+        // whoever happens to hold that id on the map being left.
+        if (state != ACTIVE)
+        {
+            return;
+        }
+
         // A lookup is answered with a full character dump, so the request is
         // rate limited the same way the original client does it rather than
         // firing once per click of an impatient double click.

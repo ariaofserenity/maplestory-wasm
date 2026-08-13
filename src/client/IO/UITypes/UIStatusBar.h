@@ -82,6 +82,7 @@ namespace jrc
         };
 
         void update_layout_position();
+        void open_own_userinfo();
         void draw_bubble(Point<int16_t> at, int16_t height) const;
         Rectangle<int16_t> bubble_bounds() const;
         void set_bubble(Bubble which);

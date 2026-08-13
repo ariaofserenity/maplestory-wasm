@@ -74,6 +74,9 @@ namespace jrc
         // Ask the server for the info of the character under the cursor,
         // which opens the user info window once the answer arrives.
         void doubleclick(Point<int16_t> position);
+        // Ask the server for the info of a character on this map, the player
+        // included. The window is opened by the answer, not by this call.
+        void request_charinfo(int32_t cid);
 
         // Check if the specified id is the player's id.
         bool is_player(int32_t cid) const;
