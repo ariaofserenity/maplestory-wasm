@@ -28,6 +28,9 @@
 #include "../../Util/Randomizer.h"
 #include "../../Util/TimedBool.h"
 
+#include <cstdint>
+#include <map>
+
 namespace jrc
 {
     class CharLook
@@ -68,6 +71,16 @@ namespace jrc
         const CharEquips& get_equips() const;
         bool is_female() const;
 
+        // The equipment ids the look was built from, keyed by the slot the
+        // server sent them in. CharEquips keys its clothes by visual slot,
+        // which merges all four ring slots into one, so listing what a
+        // character wears has to go back to these. Only meaningful for
+        // remote characters, whose look is rebuilt on every change - the
+        // player's own equipment is tracked by their Inventory instead.
+        const std::map<int8_t, int32_t>& get_equip_ids() const;
+        // Equips that a cash item is worn over, keyed the same way.
+        const std::map<int8_t, int32_t>& get_hidden_equip_ids() const;
+
         // Bounding box of the body and head of the current animation frame,
         // relative to the position the look is drawn at. Used to decide
         // whether the cursor is over the character.
@@ -94,6 +107,8 @@ namespace jrc
 
         bool flip;
         bool female;
+        std::map<int8_t, int32_t> equip_ids;
+        std::map<int8_t, int32_t> hidden_equip_ids;
 
         const BodyAction* action;
         std::string actionstr;

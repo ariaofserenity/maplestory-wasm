@@ -31,6 +31,8 @@ namespace jrc
         reset();
 
         female = entry.female;
+        equip_ids = entry.equips;
+        hidden_equip_ids = entry.maskedequips;
 
         set_body(entry.skin);
         set_hair(entry.hairid);
@@ -58,6 +60,8 @@ namespace jrc
     {
         flip = true;
         female = false;
+        equip_ids.clear();
+        hidden_equip_ids.clear();
 
         action    = nullptr;
         actionstr = "";
@@ -667,6 +671,16 @@ namespace jrc
     bool CharLook::is_female() const
     {
         return female;
+    }
+
+    const std::map<int8_t, int32_t>& CharLook::get_equip_ids() const
+    {
+        return equip_ids;
+    }
+
+    const std::map<int8_t, int32_t>& CharLook::get_hidden_equip_ids() const
+    {
+        return hidden_equip_ids;
     }
 
     Rectangle<int16_t> CharLook::get_body_rect() const
