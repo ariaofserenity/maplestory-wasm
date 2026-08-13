@@ -47,6 +47,30 @@ namespace jrc
                 label.change_text(text + "..");
             }
         }
+
+        // Markers are anchored on their bottom centre so the icon rests on the
+        // spot it stands for instead of hanging off to one side of it. Drawing
+        // already shifts a texture by its own origin, and the helper sets are
+        // inconsistent about carrying one: the player and other-character
+        // markers are pre-centred while npc and portal markers are not. Folding
+        // the origin back in keeps the anchor the same for every marker, no
+        // matter which helper set is in use.
+        Point<int16_t> marker_anchor(const Animation& marker)
+        {
+            return marker.get_origin() - marker.get_dimensions() / Point<int16_t>(2, 1);
+        }
+
+        // Bounds of a marker anchored at the given spot, in minimap coordinates.
+        Rectangle<int16_t> marker_bounds(const Animation& marker, Point<int16_t> anchor)
+        {
+            Point<int16_t> dimensions = marker.get_dimensions();
+            Point<int16_t> half_width(dimensions.x() / 2, 0);
+
+            return Rectangle<int16_t>(
+                anchor - half_width - Point<int16_t>(0, dimensions.y()),
+                anchor + half_width
+            );
+        }
     }
 
     UIMiniMap::UIMiniMap(const CharStats& stats)
@@ -119,13 +143,7 @@ namespace jrc
 
             if (has_map)
             {
-                Animation portal_marker(marker_node["portal"]);
-
-                for (const auto& portal : static_marker_info)
-                {
-                    portal_marker.draw(position + portal.second, alpha);
-                }
-
+                draw_static_markers(position, alpha);
                 draw_movable_markers(position, alpha);
 
                 if (list_npc_enabled)
@@ -146,14 +164,10 @@ namespace jrc
 
             if (has_map)
             {
-                Animation portal_marker(marker_node["portal"]);
+                Point<int16_t> max_origin = position + Point<int16_t>(0, MAX_ADJ);
 
-                for (const auto& portal : static_marker_info)
-                {
-                    portal_marker.draw(position + portal.second + Point<int16_t>(0, MAX_ADJ), alpha);
-                }
-
-                draw_movable_markers(position + Point<int16_t>(0, MAX_ADJ), alpha);
+                draw_static_markers(max_origin, alpha);
+                draw_movable_markers(max_origin, alpha);
 
                 if (list_npc_enabled)
                 {
@@ -294,13 +308,12 @@ namespace jrc
 
         bool found = false;
         MapObjects* npcs = Stage::get().get_npcs().get_npcs();
+        Animation npc_marker(marker_node["npc"]);
 
         for (auto npc = npcs->begin(); npc != npcs->end(); ++npc)
         {
-            Point<int16_t> npc_pos =
-                (npc->second->get_position() + center_offset) / scale +
-                Point<int16_t>(map_draw_origin_x, map_draw_origin_y);
-            Rectangle<int16_t> marker_spot(npc_pos - Point<int16_t>(4, 8), npc_pos + Point<int16_t>(4, 8));
+            Rectangle<int16_t> marker_spot =
+                marker_bounds(npc_marker, world_to_minimap(npc->second->get_position()));
 
             if (type == MAX)
             {
@@ -326,9 +339,11 @@ namespace jrc
 
         if (!found)
         {
+            Animation portal_marker(marker_node["portal"]);
+
             for (const auto& portal : static_marker_info)
             {
-                Rectangle<int16_t> marker_spot(portal.second, portal.second + Point<int16_t>(8, 8));
+                Rectangle<int16_t> marker_spot = marker_bounds(portal_marker, portal.second);
 
                 if (type == MAX)
                 {
@@ -584,6 +599,15 @@ namespace jrc
         update_dimensions();
     }
 
+    Point<int16_t> UIMiniMap::world_to_minimap(Point<int16_t> world_pos) const
+    {
+        // The map picture is shrunk by the magnification the map data asks for
+        // and its centre marks where the world origin ended up on that picture,
+        // so world coordinates only line up with the drawn canvas once both are
+        // applied on top of wherever the canvas itself got placed.
+        return (world_pos + center_offset) / scale + Point<int16_t>(map_draw_origin_x, map_draw_origin_y);
+    }
+
     void UIMiniMap::draw_movable_markers(Point<int16_t> init_pos, float alpha) const
     {
         if (!has_map)
@@ -592,28 +616,41 @@ namespace jrc
         }
 
         Animation npc_marker(marker_node["npc"]);
-        Point<int16_t> npc_offset = npc_marker.get_dimensions() / Point<int16_t>(2, 1);
+        Point<int16_t> npc_offset = marker_anchor(npc_marker);
 
         MapObjects* npcs = Stage::get().get_npcs().get_npcs();
         for (auto npc = npcs->begin(); npc != npcs->end(); ++npc)
         {
-            Point<int16_t> npc_pos = npc->second->get_position();
-            npc_marker.draw((npc_pos + center_offset) / scale - npc_offset + Point<int16_t>(map_draw_origin_x, map_draw_origin_y) + init_pos, alpha);
+            npc_marker.draw(init_pos + world_to_minimap(npc->second->get_position()) + npc_offset, alpha);
         }
 
         Animation other_marker(marker_node["another"]);
-        Point<int16_t> other_offset = other_marker.get_dimensions() / Point<int16_t>(2, 1);
+        Point<int16_t> other_offset = marker_anchor(other_marker);
 
         MapObjects* chars = Stage::get().get_chars().get_chars();
         for (auto chr = chars->begin(); chr != chars->end(); ++chr)
         {
-            Point<int16_t> chr_pos = chr->second->get_position();
-            other_marker.draw((chr_pos + center_offset) / scale - other_offset + Point<int16_t>(map_draw_origin_x, map_draw_origin_y) + init_pos, alpha);
+            other_marker.draw(init_pos + world_to_minimap(chr->second->get_position()) + other_offset, alpha);
         }
 
         Point<int16_t> player_pos = Stage::get().get_player().get_position();
-        Point<int16_t> player_offset = player_marker.get_dimensions() / Point<int16_t>(2, 1);
-        player_marker.draw((player_pos + center_offset) / scale - player_offset + Point<int16_t>(map_draw_origin_x, map_draw_origin_y) + init_pos, alpha);
+        player_marker.draw(init_pos + world_to_minimap(player_pos) + marker_anchor(player_marker), alpha);
+    }
+
+    void UIMiniMap::draw_static_markers(Point<int16_t> init_pos, float alpha) const
+    {
+        if (!has_map)
+        {
+            return;
+        }
+
+        Animation portal_marker(marker_node["portal"]);
+        Point<int16_t> portal_offset = marker_anchor(portal_marker);
+
+        for (const auto& portal : static_marker_info)
+        {
+            portal_marker.draw(init_pos + portal.second + portal_offset, alpha);
+        }
     }
 
     void UIMiniMap::update_static_markers()
@@ -625,19 +662,18 @@ namespace jrc
             return;
         }
 
-        Animation portal_marker(marker_node["portal"]);
-        Point<int16_t> marker_offset = portal_marker.get_dimensions() / Point<int16_t>(2, 1);
-
         for (nl::node portal : map_node["portal"])
         {
             int32_t portal_type = portal["pt"];
             if (portal_type == 2)
             {
-                Point<int16_t> marker_pos =
-                    (Point<int16_t>(portal["x"], portal["y"]) + center_offset) / scale -
-                    marker_offset +
-                    Point<int16_t>(map_draw_origin_x, map_draw_origin_y);
-                static_marker_info.emplace_back(portal.name(), marker_pos);
+                // Kept as the spot the portal sits on rather than a draw
+                // position, so drawing and cursor tests can each apply the
+                // marker geometry they need.
+                static_marker_info.emplace_back(
+                    portal.name(),
+                    world_to_minimap(Point<int16_t>(portal["x"], portal["y"]))
+                );
             }
         }
     }
@@ -788,8 +824,9 @@ namespace jrc
         if (selected >= 0 && selected < static_cast<int16_t>(list_npc_list.size()))
         {
             Point<int16_t> npc_pos =
-                (list_npc_list[selected]->get_position() + center_offset) / scale +
-                Point<int16_t>(map_draw_origin_x, map_draw_origin_y - selected_marker.get_dimensions().y() + (type == MAX ? MAX_ADJ : 0));
+                world_to_minimap(list_npc_list[selected]->get_position()) +
+                marker_anchor(selected_marker) +
+                Point<int16_t>(0, type == MAX ? MAX_ADJ : 0);
 
             selected_marker.draw(position + npc_pos, 0.5f);
         }

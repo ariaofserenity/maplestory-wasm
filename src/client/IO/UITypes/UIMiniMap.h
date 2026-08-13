@@ -79,7 +79,9 @@ namespace jrc
         void toggle_buttons();
         void update_text();
         void update_canvas();
+        Point<int16_t> world_to_minimap(Point<int16_t> world_pos) const;
         void draw_movable_markers(Point<int16_t> init_pos, float alpha) const;
+        void draw_static_markers(Point<int16_t> init_pos, float alpha) const;
         void update_static_markers();
         void set_npclist_active(bool active);
         void update_dimensions();
