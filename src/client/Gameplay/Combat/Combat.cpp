@@ -87,6 +87,13 @@ namespace jrc
         // flood the server with attack packets.
         constexpr int32_t KEYDOWN_MIN_INTERVAL = 120;
 
+        // How long after a swing lands its final attack goes off, as a fraction
+        // of the delay the swing itself took. The client places it a third of
+        // the way from that frame to the end of the action, and an action runs
+        // roughly twice as long as it takes to land.
+        constexpr int32_t FINAL_ATTACK_DELAY_NUM = 4;
+        constexpr int32_t FINAL_ATTACK_DELAY_DEN = 3;
+
         const Randomizer randomizer;
 
         // Delay before a given target is hit. Divided by the attack speed
@@ -153,6 +160,7 @@ namespace jrc
         }
 
         update_cast();
+        update_final_attack();
 
         attackresults.update();
         bulleteffects.update();
@@ -183,6 +191,8 @@ namespace jrc
         teleport_cooldown = 0;
         // A cast cannot survive the map it was started on.
         cast = {};
+        // Neither can a follow-up attack aimed at monsters on it.
+        finalattack_skill = 0;
         // Map-anchored effects mean nothing on the next map.
         movingeffects.clear();
         groundeffects.clear();
@@ -366,23 +376,7 @@ namespace jrc
     {
         if (move.is_attack())
         {
-            Attack attack = player.prepare_attack(move.is_skill());
-
-            move.apply_useeffects(player);
-            move.apply_actions(player, attack.type);
-
-            player.set_afterimage(move.get_id());
-
-            move.apply_stats(player, attack);
-
-            AttackResult result = mobs.send_attack(attack);
-            result.attacker = player.get_oid();
-            extract_effects(player, move, result);
-
-            apply_use_movement(move);
-            apply_result_movement(move, result);
-
-            AttackPacket(result).dispatch();
+            apply_attack_move(move);
         }
         else if (is_teleport_skill(move.get_id()))
         {
@@ -407,6 +401,88 @@ namespace jrc
             int32_t level = player.get_skills().get_level(moveid);
             UseSkillPacket(moveid, level).dispatch();
         }
+    }
+
+    void Combat::apply_attack_move(const SpecialMove& move)
+    {
+        Attack attack = player.prepare_attack(move.is_skill());
+
+        move.apply_useeffects(player);
+        move.apply_actions(player, attack.type);
+
+        player.set_afterimage(move.get_id());
+
+        move.apply_stats(player, attack);
+
+        AttackResult result = mobs.send_attack(attack);
+        result.attacker = player.get_oid();
+        extract_effects(player, move, result);
+
+        apply_use_movement(move);
+        apply_result_movement(move, result);
+
+        AttackPacket(result).dispatch();
+
+        try_register_final_attack(move);
+    }
+
+    void Combat::try_register_final_attack(const SpecialMove& move)
+    {
+        // Only a skill chains into a final attack. The reference client reads
+        // the chain off the skill that was swung, so a plain attack - which has
+        // no skill data to read it from - never sets one off.
+        if (!move.is_skill())
+            return;
+
+        Weapon::Type weapon = player.get_stats().get_weapontype();
+        int32_t skillid = SkillData::get(move.get_id()).get_final_attack(weapon);
+        if (skillid == 0)
+            return;
+
+        int32_t level = player.get_skills().get_level(skillid);
+        if (level <= 0)
+            return;
+
+        // A final attack's whole level data is its chance and its damage; prop
+        // is how often the swing sets it off.
+        if (!randomizer.below(SkillData::get(skillid).get_stats(level).chance))
+            return;
+
+        finalattack_skill = skillid;
+        // The client fires it a third of the way from the frame the swing lands
+        // to the end of the action. Only the landing frame is exposed here, so
+        // the same fraction is taken off that instead of off the remainder.
+        finalattack_delay = player.get_attackdelay(0) * FINAL_ATTACK_DELAY_NUM
+            / FINAL_ATTACK_DELAY_DEN;
+    }
+
+    void Combat::update_final_attack()
+    {
+        if (finalattack_skill == 0)
+            return;
+
+        finalattack_delay -= Constants::TIMESTEP;
+        if (finalattack_delay > 0)
+            return;
+
+        int32_t skillid = finalattack_skill;
+        finalattack_skill = 0;
+
+        // Nothing is loosed from a ladder or a chair the character grabbed in
+        // the moment between the swing and its follow-up. can_use does not
+        // cover it here: a final attack is passive skill data, so it does not
+        // read as an attack to the checks that gate one.
+        if (player.is_climbing() || player.is_sitting())
+            return;
+
+        const SpecialMove& move = get_move(skillid);
+        // The follow-up is a shot of its own and spends its own arrow, which the
+        // server charges for as well, so it is dropped rather than fired when
+        // the swing that set it off emptied the quiver.
+        if (player.can_use(move) != SpecialMove::FBR_NONE)
+            return;
+
+        apply_attack_move(move);
     }
 
     void Combat::apply_use_movement(const SpecialMove& move)

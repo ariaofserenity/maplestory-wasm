@@ -169,9 +169,13 @@ namespace jrc
         update_buffed(ACCURACY, Equipstat::ACC);
         update_buffed(AVOID, Equipstat::AVOID);
 
+        // Nothing in the game files gives a critical a damage range - Critical
+        // Shot and Sharp Eyes each state a single percentage - so both ends of
+        // the range read the same number.
+        std::string critdamage = std::to_string(static_cast<int32_t>(stats.get_critdamage() * 100)) + "%";
         statlabels[CRIT     ].change_text(std::to_string(static_cast<int32_t>(stats.get_critical()   * 100)) + "%");
-        statlabels[MINCRIT  ].change_text(std::to_string(static_cast<int32_t>(stats.get_mincrit()    * 100)) + "%");
-        statlabels[MAXCRIT  ].change_text(std::to_string(static_cast<int32_t>(stats.get_maxcrit()    * 100)) + "%");
+        statlabels[MINCRIT  ].change_text(critdamage);
+        statlabels[MAXCRIT  ].change_text(critdamage);
         statlabels[BDM      ].change_text(std::to_string(static_cast<int32_t>(stats.get_bossdmg()    * 100)) + "%");
         statlabels[IGNOREDEF].change_text(std::to_string(static_cast<int32_t>(stats.get_ignoredef()  * 100)) + "%");
         statlabels[RESIST   ].change_text(std::to_string(static_cast<int32_t>(stats.get_resistance() * 100)) + "%");
@@ -245,14 +249,10 @@ namespace jrc
         bool nowap = stats.get_stat(Maplestat::AP) > 0;
         Button::State newstate = nowap ? Button::NORMAL : Button::DISABLED;
 
-        // Keep the AP controls on a single layout and let the button state
-        // swap the texture. MapleButton already normalizes per-state origins.
-        buttons[BT_HP ]->set_position(Point<int16_t>(20, -36));
-        buttons[BT_MP ]->set_position(Point<int16_t>(20, -18));
-        buttons[BT_STR]->set_position(Point<int16_t>(20,  51));
-        buttons[BT_DEX]->set_position(Point<int16_t>(20,  69));
-        buttons[BT_INT]->set_position(Point<int16_t>(20,  87));
-        buttons[BT_LUK]->set_position(Point<int16_t>(20, 105));
+        // Each BtXxxUp canvas carries the origin that lines it up with its own
+        // stat row, and every state of a button shares that origin, so the
+        // buttons stay put at their default position and only the texture is
+        // swapped by the state below.
 
         // Beginner AP assignment is controlled by the server: when starter AP
         // is manual, Cosmic exposes spendable AP through the normal stat pool.

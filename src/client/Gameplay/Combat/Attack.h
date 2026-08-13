@@ -47,6 +47,8 @@ namespace jrc
         double mindamage    = 1.0;
         double maxdamage    = 1.0;
         float critical      = 0.0f;
+        // What a critical hit is worth, as a multiple of a normal one.
+        float critdamage    = 1.0f;
         float ignoredef     = 0.0f;
         int32_t matk        = 0;
         int32_t accuracy    = 0;

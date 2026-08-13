@@ -126,7 +126,8 @@ namespace jrc
         std::pair<int32_t, bool> next_damage(double mindamage,
                                              double maxdamage,
                                              float  hitchance,
-                                             float  critical) const;
+                                             float  critical,
+                                             float  critdamage) const;
 
         /// Return the current 'head' position.
         Point<int16_t> get_head_position(Point<int16_t> position) const;

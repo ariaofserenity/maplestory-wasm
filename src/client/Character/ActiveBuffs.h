@@ -63,6 +63,14 @@ namespace jrc
     };
 
 
+    // Buff for SHARP_EYES, whose two numbers - how often a critical lands and
+    // what it is worth - share one value, the rate in the high byte.
+    class SharpEyesBuff : public ActiveBuff
+    {
+        void apply_to(CharStats& stats, int16_t value) const override;
+    };
+
+
     // Buff for BOOSTER
     class BoosterBuff : public ActiveBuff
     {

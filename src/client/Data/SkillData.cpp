@@ -79,6 +79,8 @@ namespace jrc
         stringsloaded = false;
         bracketsloaded = false;
         actionsloaded = false;
+        reqskillsloaded = false;
+        finalattacksloaded = false;
         iconsloaded = false;
 
         reqweapon = Weapon::NONE;
@@ -351,6 +353,68 @@ namespace jrc
             return {};
 
         return actions[seed % actions.size()];
+    }
+
+    const std::unordered_map<int32_t, int32_t>& SkillData::get_required_skills() const
+    {
+        if (!reqskillsloaded)
+        {
+            reqskillsloaded = true;
+            // Each child is named after a skill that has to be trained first
+            // and holds the level that skill has to reach. A child whose name
+            // is not a skill id is skipped rather than treated as skill zero,
+            // which no character can ever have and which would lock the
+            // dependent skill for good.
+            //
+            // The level is read through get_integer rather than taken as an
+            // int because a handful of entries store it as a string instead.
+            for (nl::node sub : src()["req"])
+            {
+                int32_t reqid = string_conversion::or_default<int32_t>(sub.name(), 0);
+                if (reqid == 0)
+                    continue;
+
+                reqskills.emplace(reqid, static_cast<int32_t>(sub.get_integer(0)));
+            }
+        }
+        return reqskills;
+    }
+
+    int32_t SkillData::get_final_attack(Weapon::Type weapon) const
+    {
+        if (!finalattacksloaded)
+        {
+            finalattacksloaded = true;
+            // Each child is named after the skill it chains into, and its own
+            // numbered children are the weapon types that skill covers - the
+            // same encoding the weapon field uses elsewhere, an item id's
+            // category minus a hundred.
+            for (nl::node sub : src()["finalAttack"])
+            {
+                FinalAttack entry;
+                entry.skillid = string_conversion::or_default<int32_t>(sub.name(), 0);
+                if (entry.skillid == 0)
+                    continue;
+
+                for (nl::node type : sub)
+                {
+                    entry.weapons.push_back(
+                        Weapon::by_value(100 + (int32_t)type)
+                    );
+                }
+                finalattacks.push_back(std::move(entry));
+            }
+        }
+
+        for (const FinalAttack& entry : finalattacks)
+        {
+            if (std::find(entry.weapons.begin(), entry.weapons.end(), weapon)
+                != entry.weapons.end())
+            {
+                return entry.skillid;
+            }
+        }
+        return 0;
     }
 
     nl::node SkillData::get_hit_root() const { return src()["hit"]; }

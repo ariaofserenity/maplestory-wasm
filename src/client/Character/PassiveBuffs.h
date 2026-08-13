@@ -18,8 +18,10 @@
 #pragma once
 #include "CharStats.h"
 
+#include <initializer_list>
 #include <unordered_map>
 #include <memory>
+#include <vector>
 
 namespace jrc
 {
@@ -42,20 +44,47 @@ namespace jrc
     };
 
 
-    // Buff for angel blessing/blessing of the spirit.
-    class AngelBlessingBuff : public ConditionlessBuff
+    // Buff for any passive that simply adds a level's numbers to equip stats.
+    // Which property feeds which stat is the whole of the skill, so the mapping
+    // is data rather than a class per skill; a property may appear twice where
+    // one number raises two stats.
+    class StatBonusBuff : public ConditionlessBuff
     {
     public:
+        struct Bonus
+        {
+            const char* property;
+            Equipstat::Id stat;
+        };
+
+        StatBonusBuff(std::initializer_list<Bonus> bonuses);
+
         void apply_to(CharStats& stats, nl::node level) const override;
+
+    private:
+        std::vector<Bonus> bonuses;
     };
 
 
-    template <Weapon::Type...W>
-    // Buff for Mastery skills.
+    template <Equipstat::Id XSTAT, Weapon::Type...W>
+    // Buff for Mastery skills, which raise the damage floor of one weapon and
+    // add a bonus of their own on top. The bonus is accuracy for the second-job
+    // masteries and weapon attack for the fourth-job ones, but it is always the
+    // level's x.
     class WeaponMasteryBuff : public PassiveBuff
     {
     public:
         bool is_applicable(CharStats& stats, nl::node level) const override;
+        void apply_to(CharStats& stats, nl::node level) const override;
+    };
+
+
+    // Buff for Critical Shot. Its prop is how often a critical lands, on top of
+    // the small chance every character starts with, and its damage is the whole
+    // of what one is worth rather than a bonus over a normal hit.
+    class CriticalShotBuff : public ConditionlessBuff
+    {
+    public:
         void apply_to(CharStats& stats, nl::node level) const override;
     };
 

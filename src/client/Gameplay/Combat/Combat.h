@@ -128,6 +128,14 @@ namespace jrc
 
         void apply_attack(const AttackResult& attack);
         void apply_move(const SpecialMove& move);
+        // Swing a move that deals damage: roll its targets, show its effects and
+        // tell the server. Split out because a final attack goes through the
+        // same path without being something the player asked for.
+        void apply_attack_move(const SpecialMove& move);
+        // Roll whether the move that was just swung sets off a follow-up attack.
+        void try_register_final_attack(const SpecialMove& move);
+        // Run a pending follow-up attack forward one tick.
+        void update_final_attack();
         // Begin the cast of a move that does not go off immediately.
         void begin_cast(const SpecialMove& move, SpecialMove::CastKind kind);
         // Run the current cast forward one tick.
@@ -169,6 +177,10 @@ namespace jrc
         RegularAttack regularattack;
         Cast cast;
         int16_t teleport_cooldown = 0;
+        // The follow-up attack a swing set off, and how long until it goes off.
+        // Zero means none is pending.
+        int32_t finalattack_skill = 0;
+        int32_t finalattack_delay = 0;
 
         TimedQueue<AttackResult> attackresults;
         TimedQueue<BulletEffect> bulleteffects;

@@ -44,9 +44,17 @@ namespace jrc
         void set_exp(int64_t exp);
         void set_mapid(int32_t mapid);
         void set_portal(uint8_t portal);
-        void set_mastery(float mastery);
+        // Raise the mastery floor only when the new value is higher, so a
+        // character holding both a mastery and its fourth-job successor keeps
+        // the better of the two whichever order they are applied in.
+        void raise_mastery(float mastery);
         void set_damagepercent(float damagepercent);
         void set_reducedamage(float reducedamage);
+        void add_critical(float critical);
+        // The share of a normal hit a critical deals, as a multiplier. Critical
+        // Shot states one outright; Sharp Eyes only adds to it.
+        void set_critdamage(float critdamage);
+        void add_critdamage(float critdamage);
 
         void change_job(uint16_t id);
 
@@ -66,8 +74,7 @@ namespace jrc
         Weapon::Type get_weapontype() const;
         float get_mastery() const;
         float get_critical() const;
-        float get_mincrit() const;
-        float get_maxcrit() const;
+        float get_critdamage() const;
         float get_reducedamage() const;
         float get_bossdmg() const;
         float get_ignoredef() const;
@@ -107,8 +114,7 @@ namespace jrc
         Weapon::Type weapontype;
         float mastery;
         float critical;
-        float mincrit;
-        float maxcrit;
+        float critdamage;
         float damagepercent;
         float bossdmg;
         float ignoredef;

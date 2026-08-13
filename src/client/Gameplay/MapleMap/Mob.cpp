@@ -705,6 +705,7 @@ namespace jrc
         double maxdamage;
         float hitchance;
         float critical;
+        float critdamage = attack.critdamage;
         int16_t leveldelta = level - attack.playerlevel;
         if (leveldelta < 0)
         {
@@ -731,7 +732,7 @@ namespace jrc
 
         std::vector<std::pair<int32_t, bool>> result(attack.hitcount);
         std::generate(result.begin(), result.end(), [&](){
-            return next_damage(mindamage, maxdamage, hitchance, critical);
+            return next_damage(mindamage, maxdamage, hitchance, critical, critdamage);
         });
 
         update_movement();
@@ -740,7 +741,7 @@ namespace jrc
         return result;
     }
 
-    std::pair<int32_t, bool> Mob::next_damage(double mindamage, double maxdamage, float hitchance, float critical) const
+    std::pair<int32_t, bool> Mob::next_damage(double mindamage, double maxdamage, float hitchance, float critical, float critdamage) const
     {
         bool hit = randomizer.below(hitchance);
         if (!hit)
@@ -754,7 +755,7 @@ namespace jrc
         bool iscritical = randomizer.below(critical);
         if (iscritical)
         {
-            damage *= 1.5;
+            damage *= critdamage;
         }
 
         if (damage < 1)

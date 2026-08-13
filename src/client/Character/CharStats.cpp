@@ -55,8 +55,10 @@ namespace jrc
         // Unmastered attacks still retain a small lower bound instead of dropping to the secondary stat alone.
         mastery = 0.1f;
         critical = 0.05f;
-        mincrit = 0.5f;
-        maxcrit = 0.75f;
+        // Only Critical Shot and Sharp Eyes state what a critical is worth, so
+        // a character with neither keeps the flat half-again the client has
+        // always dealt rather than losing criticals outright.
+        critdamage = 1.5f;
         damagepercent = 0.0f;
         bossdmg = 0.0f;
         ignoredef = 0.0f;
@@ -199,9 +201,27 @@ namespace jrc
         portal = p;
     }
 
-    void CharStats::set_mastery(float m)
+    void CharStats::raise_mastery(float m)
     {
-        mastery = m;
+        if (m > mastery)
+        {
+            mastery = m;
+        }
+    }
+
+    void CharStats::add_critical(float c)
+    {
+        critical += c;
+    }
+
+    void CharStats::set_critdamage(float c)
+    {
+        critdamage = c;
+    }
+
+    void CharStats::add_critdamage(float c)
+    {
+        critdamage += c;
     }
 
     void CharStats::set_damagepercent(float d)
@@ -293,14 +313,9 @@ namespace jrc
         return critical;
     }
 
-    float CharStats::get_mincrit() const
+    float CharStats::get_critdamage() const
     {
-        return mincrit;
-    }
-
-    float CharStats::get_maxcrit() const
-    {
-        return maxcrit;
+        return critdamage;
     }
 
     float CharStats::get_reducedamage() const

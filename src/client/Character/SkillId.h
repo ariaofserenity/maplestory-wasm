@@ -152,13 +152,20 @@ namespace jrc
             PRIEST_TELEPORT = 2301001,
 
             // Bowman
+            BLESSING_OF_AMAZON = 3000000,
+            CRITICAL_SHOT = 3000001,
+            EYE_OF_AMAZON = 3000002,
+            FOCUS = 3001003,
             ARROW_BLOW = 3001004,
+            DOUBLE_SHOT = 3001005,
 
             // Hunter
             BOW_MASTERY = 3100000,
+            FINAL_ATTACK_BOW = 3100001,
             ARROW_BOMB = 3101005,
 
             // Ranger
+            THRUST = 3110000,
             INFERNO = 3111003,
             BLIZZARD_SNIPER = 3211003,
             ARROW_ERUPTION = 3211004,
@@ -168,6 +175,13 @@ namespace jrc
             BLIZZARD_ARCHMAGE = 2221007,
             ARROW_RAIN = 3111004,
             STRAFE = 3111006,
+
+            // Bowmaster
+            BOW_EXPERT = 3120005,
+            MAPLE_WARRIOR_BOWMASTER = 3121000,
+            SHARP_EYES_BOWMASTER = 3121002,
+            HAMSTRING = 3121007,
+            CONCENTRATE = 3121008,
 
             // Crossbowman
             CROSSBOW_MASTERY = 3200000,

@@ -25,48 +25,56 @@
 
 namespace jrc
 {
+    namespace
+    {
+        std::unique_ptr<PassiveBuff> stat_bonus(
+            std::initializer_list<StatBonusBuff::Bonus> bonuses) {
+
+            return std::make_unique<StatBonusBuff>(bonuses);
+        }
+    }
+
     bool ConditionlessBuff::is_applicable(CharStats&, nl::node) const
     {
         return true;
     }
 
 
-    void AngelBlessingBuff::apply_to(CharStats& stats, nl::node level) const
+    StatBonusBuff::StatBonusBuff(std::initializer_list<Bonus> in_bonuses)
+        : bonuses(in_bonuses) {}
+
+    void StatBonusBuff::apply_to(CharStats& stats, nl::node level) const
     {
-        stats.add_value(Equipstat::WATK, level["x"]);
-        stats.add_value(Equipstat::MAGIC, level["y"]);
-        stats.add_value(Equipstat::ACC, level["z"]);
-        stats.add_value(Equipstat::AVOID, level["z"]);
+        for (const Bonus& bonus : bonuses)
+        {
+            stats.add_value(bonus.stat, level[bonus.property]);
+        }
     }
 
 
-    template<Weapon::Type W1, Weapon::Type W2>
-    bool f_is_applicable(CharStats& stats, nl::node level)
+    template <Equipstat::Id XSTAT, Weapon::Type...W>
+    bool WeaponMasteryBuff<XSTAT, W...>::is_applicable(CharStats& stats, nl::node) const
     {
-        return f_is_applicable<W1>(stats, level)
-            || f_is_applicable<W2>(stats, level);
+        Weapon::Type held = stats.get_weapontype();
+        return ((held == W) || ...);
     }
 
-    template<Weapon::Type W1>
-    bool f_is_applicable(CharStats& stats, nl::node)
-    {
-        return stats.get_weapontype() == W1;
-    }
-
-    template <Weapon::Type...W>
-    bool WeaponMasteryBuff<W...>::is_applicable(CharStats& stats, nl::node level) const
-    {
-        return f_is_applicable<W...>(stats, level);
-    }
-
-    template <Weapon::Type...W>
-    void WeaponMasteryBuff<W...>::apply_to(CharStats& stats, nl::node level) const
+    template <Equipstat::Id XSTAT, Weapon::Type...W>
+    void WeaponMasteryBuff<XSTAT, W...>::apply_to(CharStats& stats, nl::node level) const
     {
         // WZ stores mastery in 5% steps above the 10% unmastered floor:
-        // e.g. 1 -> 15%, 10 -> 60%.
+        // e.g. 1 -> 15%, 10 -> 60%. Bow Expert continues the same scale from
+        // 11, which is where its 65% starts.
         float mastery = 0.1f + static_cast<float>(level["mastery"]) * 0.05f;
-        stats.set_mastery(mastery);
-        stats.add_value(Equipstat::ACC, level["x"]);
+        stats.raise_mastery(mastery);
+        stats.add_value(XSTAT, level["x"]);
+    }
+
+
+    void CriticalShotBuff::apply_to(CharStats& stats, nl::node level) const
+    {
+        stats.add_critical(static_cast<float>(level["prop"]) / 100);
+        stats.set_critdamage(static_cast<float>(level["damage"]) / 100);
     }
 
 
@@ -95,11 +103,16 @@ namespace jrc
     PassiveBuffs::PassiveBuffs()
     {
         // Beginner
-        buffs[SkillId::ANGEL_BLESSING] = std::make_unique<AngelBlessingBuff>();
+        buffs[SkillId::ANGEL_BLESSING] = stat_bonus({
+            { "x", Equipstat::WATK },
+            { "y", Equipstat::MAGIC },
+            { "z", Equipstat::ACC },
+            { "z", Equipstat::AVOID }
+        });
 
         // Fighter
-        buffs[SkillId::SWORD_MASTERY_FIGHTER] = std::make_unique<WeaponMasteryBuff<Weapon::SWORD_1H, Weapon::SWORD_2H>>();
-        buffs[SkillId::AXE_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::AXE_1H, Weapon::AXE_2H>>();
+        buffs[SkillId::SWORD_MASTERY_FIGHTER] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::SWORD_1H, Weapon::SWORD_2H>>();
+        buffs[SkillId::AXE_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::AXE_1H, Weapon::AXE_2H>>();
 
         // Crusader
 
@@ -107,8 +120,8 @@ namespace jrc
         buffs[SkillId::ACHILLES_HERO] = std::make_unique<AchillesBuff>();
 
         // Page
-        buffs[SkillId::SWORD_MASTERY_PAGE] = std::make_unique<WeaponMasteryBuff<Weapon::SWORD_1H, Weapon::SWORD_2H>>();
-        buffs[SkillId::BW_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::MACE_1H, Weapon::MACE_2H>>();
+        buffs[SkillId::SWORD_MASTERY_PAGE] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::SWORD_1H, Weapon::SWORD_2H>>();
+        buffs[SkillId::BW_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::MACE_1H, Weapon::MACE_2H>>();
 
         // White Knight
 
@@ -116,8 +129,8 @@ namespace jrc
         buffs[SkillId::ACHILLES_PALADIN] = std::make_unique<AchillesBuff>();
 
         // Spearman
-        buffs[SkillId::SPEAR_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::SPEAR>>();
-        buffs[SkillId::PA_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::POLEARM>>();
+        buffs[SkillId::SPEAR_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::SPEAR>>();
+        buffs[SkillId::PA_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::POLEARM>>();
 
         // Dragon Knight
 
@@ -125,27 +138,37 @@ namespace jrc
         buffs[SkillId::ACHILLES_DK] = std::make_unique<AchillesBuff>();
         buffs[SkillId::BERSERK] = std::make_unique<BerserkBuff>();
 
+        // Bowman
+        buffs[SkillId::BLESSING_OF_AMAZON] = stat_bonus({ { "x", Equipstat::ACC } });
+        buffs[SkillId::CRITICAL_SHOT] = std::make_unique<CriticalShotBuff>();
+
         // Hunter
-        buffs[SkillId::BOW_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::BOW>>();
+        buffs[SkillId::BOW_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::BOW>>();
+
+        // Ranger
+        buffs[SkillId::THRUST] = stat_bonus({ { "speed", Equipstat::SPEED } });
+
+        // Bowmaster
+        buffs[SkillId::BOW_EXPERT] = std::make_unique<WeaponMasteryBuff<Equipstat::WATK, Weapon::BOW>>();
 
         // Crossbowman
-        buffs[SkillId::CROSSBOW_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::CROSSBOW>>();
+        buffs[SkillId::CROSSBOW_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::CROSSBOW>>();
 
         // Assassin
-        buffs[SkillId::CLAW_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::CLAW>>();
+        buffs[SkillId::CLAW_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::CLAW>>();
 
         // Bandit
-        buffs[SkillId::DAGGER_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::DAGGER>>();
+        buffs[SkillId::DAGGER_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::DAGGER>>();
 
         // Brawler
-        buffs[SkillId::KNUCKLER_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::KNUCKLE>>();
+        buffs[SkillId::KNUCKLER_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::KNUCKLE>>();
 
         // Gunslinger
-        buffs[SkillId::GUN_MASTERY] = std::make_unique<WeaponMasteryBuff<Weapon::GUN>>();
+        buffs[SkillId::GUN_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::GUN>>();
 
         // Aran
-        buffs[SkillId::POLEARM_MASTERY_ARAN] = std::make_unique<WeaponMasteryBuff<Weapon::POLEARM>>();
-        buffs[SkillId::HIGH_MASTERY_ARAN] = std::make_unique<WeaponMasteryBuff<Weapon::POLEARM>>();
+        buffs[SkillId::POLEARM_MASTERY_ARAN] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::POLEARM>>();
+        buffs[SkillId::HIGH_MASTERY_ARAN] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::POLEARM>>();
     }
 
     void PassiveBuffs::apply_buff(CharStats& stats, int32_t skill_id, int32_t skill_level) const

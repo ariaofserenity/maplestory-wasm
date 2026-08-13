@@ -48,6 +48,15 @@ namespace jrc
     }
 
 
+    void SharpEyesBuff::apply_to(CharStats& stats, int16_t value) const
+    {
+        stats.add_critical(static_cast<float>((value >> 8) & 0xFF) / 100);
+        // The low byte is the whole of a critical, not the bonus over one, so
+        // only the part above a normal hit adds to what Critical Shot set.
+        stats.add_critdamage(static_cast<float>((value & 0xFF) - 100) / 100);
+    }
+
+
     void BoosterBuff::apply_to(CharStats& stats, int16_t value) const
     {
         stats.set_attackspeed(static_cast<int8_t>(value));
@@ -58,11 +67,14 @@ namespace jrc
     {
         buffs[Buffstat::MAPLE_WARRIOR] = std::make_unique<MapleWarriorBuff>();
         buffs[Buffstat::STANCE] = std::make_unique<StanceBuff>();
+        buffs[Buffstat::SHARP_EYES] = std::make_unique<SharpEyesBuff>();
         buffs[Buffstat::BOOSTER] = std::make_unique<BoosterBuff>();
         buffs[Buffstat::WATK] = std::make_unique<SimpleStatBuff<Equipstat::WATK>>();
         buffs[Buffstat::WDEF] = std::make_unique<SimpleStatBuff<Equipstat::WDEF>>();
         buffs[Buffstat::MATK] = std::make_unique<SimpleStatBuff<Equipstat::MAGIC>>();
         buffs[Buffstat::MDEF] = std::make_unique<SimpleStatBuff<Equipstat::MDEF>>();
+        buffs[Buffstat::ACC] = std::make_unique<SimpleStatBuff<Equipstat::ACC>>();
+        buffs[Buffstat::AVOID] = std::make_unique<SimpleStatBuff<Equipstat::AVOID>>();
         buffs[Buffstat::SPEED] = std::make_unique<SimpleStatBuff<Equipstat::SPEED>>();
         buffs[Buffstat::JUMP] = std::make_unique<SimpleStatBuff<Equipstat::JUMP>>();
         buffs[Buffstat::HYPERBODYHP] = std::make_unique<PercentageStatBuff<Equipstat::HP>>();

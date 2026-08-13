@@ -350,6 +350,7 @@ namespace jrc
             attack.maxdamage /= 10;
         }
         attack.critical    = stats.get_critical();
+        attack.critdamage  = stats.get_critdamage();
         attack.ignoredef   = stats.get_ignoredef();
         attack.accuracy    = stats.get_total(Equipstat::ACC);
         attack.playerlevel = stats.get_stat(Maplestat::LEVEL);

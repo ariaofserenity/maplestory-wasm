@@ -119,6 +119,10 @@ namespace jrc
         // Return the data of one level.
         // If there is no data for that level, a default object is returned.
         const Stats& get_stats(int32_t level) const;
+        // The skills that must already be trained before this one accepts
+        // points, each mapped to the level it has to reach. Empty for a skill
+        // that stands on its own.
+        const std::unordered_map<int32_t, int32_t>& get_required_skills() const;
 
         // Return the name of the skill.
         const std::string& get_name() const;
@@ -196,6 +200,12 @@ namespace jrc
         // The element the skill deals damage in, empty for physical skills.
         const std::string& get_element() const;
 
+        // The follow-up attack this skill can set off when swung with the given
+        // weapon, or zero when it can set off none. A skill names the final
+        // attacks it chains into and the weapons each one applies to, which is
+        // why a bow's Final Attack never fires off a crossbow skill.
+        int32_t get_final_attack(Weapon::Type weapon) const;
+
     private:
         // Allow the cache to use the constructor.
         friend Cache<SkillData>;
@@ -250,6 +260,19 @@ namespace jrc
         mutable bool bracketsloaded;
         mutable std::vector<std::string> actions;
         mutable bool actionsloaded;
+
+        // Required skill id paired with the level it must reach.
+        mutable std::unordered_map<int32_t, int32_t> reqskills;
+        mutable bool reqskillsloaded;
+
+        // One follow-up attack and the weapons it applies to.
+        struct FinalAttack
+        {
+            int32_t skillid;
+            std::vector<Weapon::Type> weapons;
+        };
+        mutable std::vector<FinalAttack> finalattacks;
+        mutable bool finalattacksloaded;
 
         mutable std::array<Texture, NUM_ICONS> icons;
         mutable bool iconsloaded;

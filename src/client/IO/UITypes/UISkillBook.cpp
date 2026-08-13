@@ -127,6 +127,18 @@ namespace jrc
         normal    = data.get_icon(SkillData::NORMAL);
         mouseover = data.get_icon(SkillData::MOUSEOVER);
         disabled  = data.get_icon(SkillData::DISABLED);
+
+        // A skill nothing has been spent on yet is drawn in its greyed icon, so
+        // the ones the character actually owns stand out at a glance. Every
+        // skill in the game files carries iconDisabled, but a missing one would
+        // otherwise leave the row with no icon at all rather than an ungreyed
+        // one, which is the worse of the two failures.
+        if (!disabled.is_valid())
+        {
+            disabled = normal;
+        }
+        enabled = lv > 0;
+
         drag_icon = std::make_unique<Icon>(
             std::make_unique<SkillDragType>(id),
             normal,
@@ -138,7 +150,7 @@ namespace jrc
 
         name  = { Text::A11L, Text::LEFT, Text::DARKGREY, namestr  };
         level = { Text::A11L, Text::LEFT, Text::DARKGREY, levelstr };
-        state = NORMAL;
+        state = enabled ? NORMAL : DISABLED;
 
         constexpr uint16_t MAX_NAME_WIDTH = 96;
         size_t overhang = 3;
@@ -174,49 +186,27 @@ namespace jrc
     {
         constexpr Rectangle<int16_t> bounds(0, 32, 0, 32);
         bool inrange = bounds.contains(cursorpos);
-        switch (state)
+
+        // An untrained skill keeps its greyed icon even under the cursor. The
+        // highlighted icon reads as "ready to use", which a skill with no
+        // points in it is not, and it cannot be dragged to a key either. Only
+        // the icon is held back - the cursor result is unchanged, so hovering
+        // one still brings up its tooltip.
+        if (!enabled)
         {
-        case NORMAL:
-        case DISABLED:
-            if (inrange)
-            {
-                if (clicked)
-                {
-                    state = MOUSEOVER;
-                    return Cursor::GRABBING;
-                }
-                else
-                {
-                    state = MOUSEOVER;
-                    return Cursor::CANGRAB;
-                }
-            }
-            else
-            {
-                return Cursor::IDLE;
-            }
-        case MOUSEOVER:
-            if (inrange)
-            {
-                if (clicked)
-                {
-                    state = MOUSEOVER;
-                    return Cursor::GRABBING;
-                }
-                else
-                {
-                    state = MOUSEOVER;
-                    return Cursor::CANGRAB;
-                }
-            }
-            else
-            {
-                state = NORMAL;
-                return Cursor::IDLE;
-            }
-        default:
+            state = DISABLED;
+        }
+        else
+        {
+            state = inrange ? MOUSEOVER : NORMAL;
+        }
+
+        if (!inrange)
+        {
             return Cursor::IDLE;
         }
+
+        return clicked ? Cursor::GRABBING : Cursor::CANGRAB;
     }
 
     int32_t SkillIcon::get_id() const
@@ -747,6 +737,18 @@ namespace jrc
         if (level >= masterlevel)
         {
             return false;
+        }
+
+        // A skill can name others that have to be trained to a given level
+        // before it takes any points of its own. The server spends the point
+        // without ever checking this, so the book is the only thing enforcing
+        // it - a raise that slipped through here would stick.
+        for (const auto& requirement : SkillData::get(skill_id).get_required_skills())
+        {
+            if (skillbook.get_level(requirement.first) < requirement.second)
+            {
+                return false;
+            }
         }
 
         switch (skill_id)

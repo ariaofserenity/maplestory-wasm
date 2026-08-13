@@ -200,25 +200,16 @@ namespace jrc
         uint64_t firstmask = recv.read_long();
         uint64_t secondmask = recv.read_long();
 
-        switch (secondmask)
+        // The values follow the masks as an unlabelled run of fixed-size
+        // records, one per bit that is set, so they have to be walked in the
+        // order the server wrote them rather than in whatever order a hash
+        // table happens to hold the stats.
+        for (const Buffstat::Code& code : Buffstat::codes)
         {
-        case Buffstat::BATTLESHIP:
-            handle_buff(recv, Buffstat::BATTLESHIP);
-            return;
-        }
-
-        for (auto& iter : Buffstat::first_codes)
-        {
-            if (firstmask & iter.second)
+            uint64_t mask = code.first ? firstmask : secondmask;
+            if (mask & code.mask)
             {
-                handle_buff(recv, iter.first);
-            }
-        }
-        for (auto& iter : Buffstat::second_codes)
-        {
-            if (secondmask & iter.second)
-            {
-                handle_buff(recv, iter.first);
+                handle_buff(recv, code.stat);
             }
         }
 
