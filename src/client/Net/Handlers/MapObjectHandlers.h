@@ -60,6 +60,14 @@ namespace jrc
     };
 
 
+    // Detailed info about a character, which opens the user info window.
+    // Opcode: CHAR_INFO(61)
+    class CharInfoHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
+
+
     // Display an effect on a character.
     // Opcode: SHOW_FOREIGN_EFFECT(198)
     class ShowForeignEffectHandler : public PacketHandler

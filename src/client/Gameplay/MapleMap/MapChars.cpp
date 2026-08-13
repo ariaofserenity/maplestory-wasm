@@ -87,4 +87,17 @@ namespace jrc
     {
         return chars.get(cid);
     }
+
+    Optional<OtherChar> MapChars::find_at(Point<int16_t> position, Point<int16_t> viewpos)
+    {
+        for (auto& iter : chars)
+        {
+            Optional<OtherChar> otherchar = iter.second.get();
+            if (otherchar && otherchar->inrange(position, viewpos))
+            {
+                return otherchar;
+            }
+        }
+        return {};
+    }
 }

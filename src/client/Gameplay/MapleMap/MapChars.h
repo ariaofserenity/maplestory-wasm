@@ -37,6 +37,9 @@ namespace jrc
 
         Optional<OtherChar> get_char(int32_t cid);
 
+        // Return the character the cursor is over, if there is one.
+        Optional<OtherChar> find_at(Point<int16_t> position, Point<int16_t> viewpos);
+
         MapObjects* get_chars()
         {
             return &chars;

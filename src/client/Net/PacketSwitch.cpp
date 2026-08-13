@@ -63,6 +63,7 @@ namespace jrc
         UPDATE_SKILL      = 36,
 
         // Messaging 1
+        FAME_RESPONSE    = 38,
         SHOW_STATUS_INFO = 39,
         MEMO_RESULT      = 41,
         ENABLE_REPORT    = 47,
@@ -99,8 +100,10 @@ namespace jrc
         LEGACY_FIELD_OBJECT     = 159,
 
         // Mapobject
-        SPAWN_CHAR  = 160,
-        REMOVE_CHAR = 161,
+        CHAR_INFO          = 61,
+        SPAWN_CHAR         = 160,
+        REMOVE_CHAR        = 161,
+        PET_EXCEPTION_LIST = 173,
 
         // Messaging
         CHAT_RECEIVED = 162,
@@ -171,6 +174,7 @@ namespace jrc
         emplace<SET_FIELD, SetfieldHandler>();
 
         // MapObject handlers
+        emplace<CHAR_INFO, CharInfoHandler>();
         emplace<SPAWN_CHAR, SpawnCharHandler>();
         emplace<CHAR_MOVED, CharMovedHandler>();
         emplace<UPDATE_CHARLOOK, UpdateCharLookHandler>();
@@ -207,6 +211,7 @@ namespace jrc
 
         // Messaging handlers
         emplace<SHOW_STATUS_INFO, ShowStatusInfoHandler>();
+        emplace<FAME_RESPONSE, FameResponseHandler>();
         emplace<PARTY_OPERATION, PartyOperationHandler>();
         emplace<PARTY_VALUE, PartyValueHandler>();
         emplace<CHAT_RECEIVED, ChatReceivedHandler>();
@@ -247,6 +252,9 @@ namespace jrc
         emplace<MAKE_NPC_SCRIPTED, NullHandler>();
         emplace<AUTO_HP_POT, NullHandler>();
         emplace<AUTO_MP_POT, NullHandler>();
+        // Sent right before CHAR_INFO for targets who excluded items from
+        // pet loot, which this client does not display yet.
+        emplace<PET_EXCEPTION_LIST, NullHandler>();
 
         // Ignored
         emplace<SELECT_WORLD, NullHandler>();

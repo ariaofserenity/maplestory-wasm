@@ -85,6 +85,14 @@ namespace jrc
     };
 
 
+    // Report the outcome of raising or lowering someone's fame.
+    // Opcode: FAME_RESPONSE(38)
+    class FameResponseHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
+
+
     // Shows the effect of a scroll.
     // Opcode: SCROLL_RESULT(167)
     class ScrollResultHandler : public PacketHandler

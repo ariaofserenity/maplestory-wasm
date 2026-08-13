@@ -9,6 +9,7 @@
 #include "../../IO/UITypes/UIParty.h"
 #include "../../IO/UITypes/UIStatusMessenger.h"
 #include "../../IO/UITypes/UIStatusBar.h"
+#include "../../IO/UITypes/UIUserInfo.h"
 
 #include "nlnx/nx.hpp"
 
@@ -498,6 +499,66 @@ namespace jrc
     {
         if (auto messenger = UI::get().get_element<UIStatusMessenger>())
             messenger->show_status(color, message);
+    }
+
+
+    void FameResponseHandler::handle(InPacket& recv) const
+    {
+        constexpr int8_t FAME_GIVEN = 0;
+        constexpr int8_t FAME_RECEIVED = 5;
+
+        int8_t status = recv.read_byte();
+
+        std::string message;
+        if (status == FAME_GIVEN)
+        {
+            std::string name = recv.read_string();
+            bool raised = recv.read_byte() != 0;
+            int16_t fame = recv.read_short();
+
+            message = name + "'s fame has been " +
+                (raised ? "raised" : "lowered") + " to " + std::to_string(fame) + ".";
+
+            // The open window is showing the fame the target had before, so
+            // it only stays right if the confirmed value replaces it.
+            if (auto userinfo = UI::get().get_element<UIUserInfo>())
+            {
+                userinfo->update_fame(name, fame);
+            }
+        }
+        else if (status == FAME_RECEIVED)
+        {
+            std::string name = recv.read_string();
+            bool raised = recv.read_byte() != 0;
+
+            message = name + " has " + (raised ? "raised" : "lowered") + " your fame.";
+        }
+        else
+        {
+            switch (status)
+            {
+            case 1:
+                message = "That character does not exist.";
+                break;
+            case 2:
+                message = "Only characters of level 15 or above can give fame.";
+                break;
+            case 3:
+                message = "You cannot raise or lower fame again today.";
+                break;
+            case 4:
+                message = "You cannot raise or lower this character's fame again this month.";
+                break;
+            default:
+                message = "Fame could not be raised or lowered.";
+                break;
+            }
+        }
+
+        if (auto messenger = UI::get().get_element<UIStatusMessenger>())
+        {
+            messenger->show_status(Text::YELLOW, message);
+        }
     }
 
 

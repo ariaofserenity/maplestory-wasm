@@ -111,6 +111,8 @@ namespace jrc
         // Player
         SPEND_AP = 87,
         SPEND_SP = 90,
+        GIVE_FAME = 95,
+        CHAR_INFO_REQUEST = 97,
         CHANGE_KEYMAP = 135,
 
         // Skill

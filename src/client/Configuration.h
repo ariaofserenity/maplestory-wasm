@@ -279,6 +279,12 @@ namespace jrc
         PosPARTY() : PointEntry("PosPARTY", "(160,120)") {}
     };
 
+    // The default position of the character info window.
+    struct PosUSERINFO : public Configuration::PointEntry
+    {
+        PosUSERINFO() : PointEntry("PosUSERINFO", "(180,120)") {}
+    };
+
     struct PosMAP : public Configuration::PointEntry
     {
         PosMAP() : PointEntry("PosMAP", "(124,2)") {}

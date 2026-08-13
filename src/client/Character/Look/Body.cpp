@@ -102,6 +102,20 @@ namespace jrc
         frameit->second.draw(args);
     }
 
+    Rectangle<int16_t> Body::get_rect(Stance::Id stance, Layer layer, uint8_t frame) const
+    {
+        auto frameit = stances[stance][layer].find(frame);
+        if (frameit == stances[stance][layer].end())
+            return {};
+
+        // The textures were shifted into place when the body was loaded, so
+        // their origin already expresses the offset from the character's
+        // position, the same way drawing uses it.
+        const Texture& texture = frameit->second;
+        Point<int16_t> lt = -texture.get_origin();
+        return { lt, lt + texture.get_dimensions() };
+    }
+
     const std::string& Body::get_name() const
     {
         return name;

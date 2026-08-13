@@ -24,6 +24,8 @@
 #include "../../Audio/Audio.h"
 #include "../../Gameplay/Stage.h"
 #include "../../Gameplay/Spawn.h"
+#include "../../IO/UI.h"
+#include "../../IO/UITypes/UIUserInfo.h"
 
 namespace jrc
 {
@@ -285,6 +287,64 @@ namespace jrc
         LookEntry look = LoginParser::parse_look(recv);
 
         Stage::get().get_chars().update_look(cid, look);
+    }
+
+
+    void CharInfoHandler::handle(InPacket& recv) const
+    {
+        UIUserInfo::Info info;
+        info.cid     = recv.read_int();
+        info.level   = static_cast<uint8_t>(recv.read_byte());
+        info.job     = recv.read_short();
+        info.fame    = recv.read_short();
+        info.married = recv.read_bool();
+        info.guild    = recv.read_string();
+        info.alliance = recv.read_string();
+
+        recv.read_byte(); // medal info, always empty on this server
+
+        // Pets are listed until a zero index terminates them. The window
+        // does not show them yet, but the trailing sections can only be
+        // reached by walking over them.
+        while (recv.available() && recv.read_byte() != 0)
+        {
+            recv.read_int();    // item id
+            recv.read_string(); // name
+            recv.read_byte();   // level
+            recv.read_short();  // closeness
+            recv.read_byte();   // fullness
+            recv.read_short();
+            recv.read_int();    // pet equip item id
+        }
+
+        if (recv.available() && recv.read_byte() != 0)
+        {
+            recv.read_int(); // mount level
+            recv.read_int(); // mount exp
+            recv.read_int(); // mount tiredness
+        }
+
+        int8_t wishlist_size = recv.available() ? recv.read_byte() : 0;
+        for (int8_t i = 0; i < wishlist_size; ++i)
+        {
+            recv.read_int(); // cash shop serial number
+        }
+
+        // Monster book and medal sections follow, neither of which the
+        // window displays yet.
+
+        // The name and the avatar are not part of the packet, so they are
+        // taken from the character standing on the map, exactly like the
+        // original client does.
+        Optional<Char> character = Stage::get().get_character(info.cid);
+        if (!character)
+        {
+            return;
+        }
+
+        info.name = character->get_name();
+
+        UI::get().emplace<UIUserInfo>(info, character->get_look());
     }
 
 

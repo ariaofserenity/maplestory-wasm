@@ -33,6 +33,9 @@ namespace jrc
     namespace
     {
         constexpr uint32_t PICKUP_INTERVAL_MS = 100;
+        // Matches the interval the original client keeps between two
+        // character info lookups.
+        constexpr int32_t CHARINFO_COOLDOWN_MS = 200;
     }
 
     Stage::Stage()
@@ -40,6 +43,7 @@ namespace jrc
         , last_pickup_time(0)
         , pending_intro_warp_mapid(-1)
         , pending_intro_warp_delay_ms(0)
+        , charinfo_cooldown_ms(0)
     {
         state = INACTIVE;
         mapid = 0;
@@ -173,6 +177,10 @@ namespace jrc
             player.set_direction(false);
         }
         update_intro_warp();
+        if (charinfo_cooldown_ms > 0)
+        {
+            charinfo_cooldown_ms -= Constants::TIMESTEP;
+        }
         handle_held_actions();
         update_directional_context();
 
@@ -454,6 +462,43 @@ namespace jrc
     Cursor::State Stage::send_cursor(bool pressed, Point<int16_t> position)
     {
         return npcs.send_cursor(pressed, position, camera.position());
+    }
+
+    void Stage::doubleclick(Point<int16_t> position)
+    {
+        if (state != ACTIVE)
+        {
+            return;
+        }
+
+        Point<int16_t> viewpos = camera.position();
+
+        // Other characters are checked before the player so that someone
+        // standing on top of us can still be looked up.
+        int32_t cid = 0;
+        if (Optional<OtherChar> otherchar = chars.find_at(position, viewpos))
+        {
+            cid = otherchar->get_oid();
+        }
+        else if (player.inrange(position, viewpos))
+        {
+            cid = player.get_oid();
+        }
+        else
+        {
+            return;
+        }
+
+        // A lookup is answered with a full character dump, so the request is
+        // rate limited the same way the original client does it rather than
+        // firing once per click of an impatient double click.
+        if (charinfo_cooldown_ms > 0)
+        {
+            return;
+        }
+
+        charinfo_cooldown_ms = CHARINFO_COOLDOWN_MS;
+        CharInfoRequestPacket(cid).dispatch();
     }
 
     bool Stage::is_player(int32_t cid) const

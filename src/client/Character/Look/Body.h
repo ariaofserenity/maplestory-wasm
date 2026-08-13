@@ -19,6 +19,7 @@
 #include "BodyDrawInfo.h"
 
 #include "../../Graphics/Texture.h"
+#include "../../Template/Rectangle.h"
 
 namespace jrc
 {
@@ -37,6 +38,10 @@ namespace jrc
         Body(int32_t skin, const BodyDrawinfo& drawinfo);
 
         void draw(Stance::Id stance, Layer layer, uint8_t frame, const DrawArgument& args) const;
+
+        // Bounds of one layer's frame relative to the position the body is
+        // drawn at. Straight (zero sized) when that frame has no graphic.
+        Rectangle<int16_t> get_rect(Stance::Id stance, Layer layer, uint8_t frame) const;
 
         const std::string& get_name() const;
 

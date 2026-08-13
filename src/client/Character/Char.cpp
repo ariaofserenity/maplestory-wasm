@@ -379,6 +379,24 @@ namespace jrc
             .get_type();
     }
 
+    bool Char::inrange(Point<int16_t> cursorpos, Point<int16_t> viewpos) const
+    {
+        if (!active)
+        {
+            return false;
+        }
+
+        Rectangle<int16_t> bounds = look.get_body_rect();
+        if (bounds.straight())
+        {
+            return false;
+        }
+
+        Point<int16_t> absp = get_position() + viewpos;
+        return Rectangle<int16_t>(bounds.getlt() + absp, bounds.getrb() + absp)
+            .contains(cursorpos);
+    }
+
     bool Char::getflip() const
     {
         return flip;

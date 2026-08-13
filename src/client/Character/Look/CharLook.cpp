@@ -20,6 +20,7 @@
 #include "../../Constants.h"
 #include "../../Data/WeaponData.h"
 
+#include <algorithm>
 #include <array>
 
 
@@ -28,6 +29,8 @@ namespace jrc
     CharLook::CharLook(const LookEntry& entry)
     {
         reset();
+
+        female = entry.female;
 
         set_body(entry.skin);
         set_hair(entry.hairid);
@@ -54,6 +57,7 @@ namespace jrc
     void CharLook::reset()
     {
         flip = true;
+        female = false;
 
         action    = nullptr;
         actionstr = "";
@@ -658,6 +662,48 @@ namespace jrc
     const CharEquips& CharLook::get_equips() const
     {
         return equips;
+    }
+
+    bool CharLook::is_female() const
+    {
+        return female;
+    }
+
+    Rectangle<int16_t> CharLook::get_body_rect() const
+    {
+        if (!body)
+            return {};
+
+        Stance::Id curstance = stance.get();
+        uint8_t curframe = stframe.get();
+
+        // Body and head together cover the character silhouette closely
+        // enough to click on, without depending on which equips are worn.
+        Rectangle<int16_t> torso = body->get_rect(curstance, Body::BODY, curframe);
+        Rectangle<int16_t> head  = body->get_rect(curstance, Body::HEAD, curframe);
+
+        Rectangle<int16_t> bounds;
+        if (torso.straight())
+            bounds = head;
+        else if (head.straight())
+            bounds = torso;
+        else
+            bounds = {
+                std::min(torso.l(), head.l()),
+                std::max(torso.r(), head.r()),
+                std::min(torso.t(), head.t()),
+                std::max(torso.b(), head.b())
+            };
+
+        // Facing left mirrors the graphics around the character's position,
+        // so the bounds have to be mirrored the same way to keep matching.
+        if (flip)
+        {
+            bounds = { static_cast<int16_t>(-bounds.r()), static_cast<int16_t>(-bounds.l()),
+                bounds.t(), bounds.b() };
+        }
+
+        return bounds;
     }
 
 

@@ -71,6 +71,9 @@ namespace jrc
         void send_key(KeyType::Id keytype, int32_t keycode, bool pressed);
         // Send mouse input to the stage.
         Cursor::State send_cursor(bool pressed, Point<int16_t> position);
+        // Ask the server for the info of the character under the cursor,
+        // which opens the user info window once the answer arrives.
+        void doubleclick(Point<int16_t> position);
 
         // Check if the specified id is the player's id.
         bool is_player(int32_t cid) const;
@@ -140,5 +143,6 @@ namespace jrc
         Combat combat;
         int32_t pending_intro_warp_mapid;
         int32_t pending_intro_warp_delay_ms;
+        int32_t charinfo_cooldown_ms;
     };
 }

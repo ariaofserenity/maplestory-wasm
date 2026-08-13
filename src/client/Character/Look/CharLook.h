@@ -24,6 +24,7 @@
 
 #include "../../Net/Login.h"
 #include "../../Template/Interpolated.h"
+#include "../../Template/Rectangle.h"
 #include "../../Util/Randomizer.h"
 #include "../../Util/TimedBool.h"
 
@@ -65,6 +66,12 @@ namespace jrc
         const Hair* get_hair() const;
         const Face* get_face() const;
         const CharEquips& get_equips() const;
+        bool is_female() const;
+
+        // Bounding box of the body and head of the current animation frame,
+        // relative to the position the look is drawn at. Used to decide
+        // whether the cursor is over the character.
+        Rectangle<int16_t> get_body_rect() const;
 
         // Initialize drawinfo.
         static void init();
@@ -86,6 +93,7 @@ namespace jrc
         uint16_t expelapsed;
 
         bool flip;
+        bool female;
 
         const BodyAction* action;
         std::string actionstr;

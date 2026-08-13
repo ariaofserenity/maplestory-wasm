@@ -119,6 +119,9 @@ namespace jrc
         /// Remove a pet with the specified index and reason.
         void remove_pet(uint8_t index, bool hunger);
 
+        /// Check whether the cursor is over this character's body.
+        bool inrange(Point<int16_t> cursorpos, Point<int16_t> viewpos) const;
+
         /// Return if the character is facing left.
         bool getflip() const;
         /// Return the name of this character.

@@ -153,6 +153,12 @@ namespace jrc
         {
             front->doubleclick(pos);
         }
+        else
+        {
+            // Nothing on top of the map claimed the click, so it may have
+            // landed on a character standing there.
+            Stage::get().doubleclick(pos);
+        }
     }
 
     void UIStateGame::rightclick(Point<int16_t> pos)

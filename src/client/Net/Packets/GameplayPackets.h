@@ -196,6 +196,39 @@ namespace jrc
         }
     };
 
+    /// Asks the server for the detailed info of a character on the same map,
+    /// which is answered with CHAR_INFO and opens the user info window.
+    /// Opcode: CHAR_INFO_REQUEST(97)
+    class CharInfoRequestPacket : public OutPacket
+    {
+    public:
+        CharInfoRequestPacket(int32_t cid) : OutPacket(CHAR_INFO_REQUEST)
+        {
+            write_time();
+            write_int(cid);
+            // Set by the original client when the target was picked by
+            // clicking a pet instead of its owner. Only pet exclusion lists
+            // are affected by it, so the plain character lookup passes 0.
+            write_byte(0);
+        }
+    };
+
+
+    /// Raises or lowers another character's fame.
+    /// Opcode: GIVE_FAME(95)
+    class GiveFamePacket : public OutPacket
+    {
+    public:
+        GiveFamePacket(int32_t cid, bool raise) : OutPacket(GIVE_FAME)
+        {
+            write_int(cid);
+            // The server derives the fame delta as 2 * mode - 1, so only
+            // these two values are accepted.
+            write_byte(raise ? 1 : 0);
+        }
+    };
+
+
     /// Tells the server that we're no longer transitioning between maps,
     /// including initial login.
     /// Opcode: PLAYER_UPDATE(0xDF)
