@@ -10,7 +10,7 @@ Usage:
     python ws_proxy.py [--ws-port WS_PORT] [--tcp-host TCP_HOST] [--tcp-port TCP_PORT]
 
 Default configuration:
-    - WebSocket listens on: ws://0.0.0.0:8080
+    - WebSocket listens on: ws://0.0.0.0:8181
     - TCP connects to: 127.0.0.1:8484
 """
 
@@ -145,8 +145,8 @@ async def main():
     parser.add_argument(
         "--ws-port",
         type=int,
-        default=8080,
-        help="WebSocket port to listen on (default: 8080)"
+        default=8181,
+        help="WebSocket port to listen on (default: 8181)"
     )
 
     args = parser.parse_args()

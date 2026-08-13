@@ -340,6 +340,8 @@ namespace jrc
 
         Attack attack;
         attack.type      = attacktype;
+        // Anything fired sweeps a line from the muzzle rather than a rect.
+        attack.linear    = attacktype == Attack::RANGED;
         attack.mindamage = stats.get_mindamage();
         attack.maxdamage = stats.get_maxdamage();
         if (degenerate)

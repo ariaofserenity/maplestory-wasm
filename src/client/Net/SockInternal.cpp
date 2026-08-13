@@ -16,7 +16,7 @@
 
 #define MAX_PACKET_LENGTH 4096 * 16
 
-#define WEB_SOCK_PORT "8080"
+#define WEB_SOCK_PORT "8181"
 
 namespace
 {

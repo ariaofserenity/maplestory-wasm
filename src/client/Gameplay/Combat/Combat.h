@@ -17,6 +17,7 @@
 //////////////////////////////////////////////////////////////////////////////
 #pragma once
 #include "Attack.h"
+#include "GroundEffect.h"
 #include "MovingEffect.h"
 #include "RegularAttack.h"
 #include "Skill.h"
@@ -43,8 +44,12 @@ namespace jrc
         // Poll attacks, damage effects, etc.
         void update();
 
-        // Make the player use a special move. Returns true if the move was used.
+        // Make the player use a special move. Returns true if the move was used
+        // or started charging.
         bool use_move(int32_t move_id);
+        // Let go of a move's key. A charging move goes off; anything else is
+        // ignored, so this is safe to call for every key release.
+        void release_move(int32_t move_id);
         // Reset transient state (e.g. on map change).
         void clear();
 
@@ -66,7 +71,7 @@ namespace jrc
             int32_t move_id;
         };
 
-        // A single area-skill animation waiting to appear.
+        // An area animation waiting to appear.
         struct SpecialEffect
         {
             int32_t user_oid;
@@ -74,21 +79,65 @@ namespace jrc
             // World position the effect was cast at, so it stays put if the
             // caster walks away mid-cast.
             Point<int16_t> origin;
+            // Non-zero means the copy travels this far while it plays, over
+            // duration ms, anchored to the map rather than to the caster.
             Point<int16_t> travel;
             uint16_t duration;
+            // Non-zero means the effect stays on the terrain this long instead
+            // of playing once.
+            uint16_t lifetime;
             int8_t z;
             bool flip;
+            // Whether origin is a map position or an offset from the caster.
+            // Travel alone cannot tell these apart: an explosion copy is
+            // anchored to the map yet does not move.
+            bool onmap;
         };
 
+        // A projectile in flight. It carries no damage: the reference client
+        // applies each target's damage on that target's own delay and leaves
+        // the shot as scenery, so an arrow through six monsters does not land
+        // all six on the frame it happens to arrive.
         struct BulletEffect
         {
-            DamageEffect damageeffect;
             Bullet bullet;
             Point<int16_t> target;
+            // What the shot was aimed at, so a homing one can follow it.
+            int32_t target_oid = 0;
+            // How long the shot takes to arrive, in ms. It is timed to land
+            // with the damage it was fired for.
+            uint16_t flighttime = 0;
+            // A straight shot flies where it was aimed instead of following its
+            // target around.
+            bool straight = false;
+        };
+
+        // A move partway through being cast. Instant moves never enter this
+        // state; a prepare move sits here for its wind-up and a keydown move for
+        // as long as its key is held.
+        struct Cast
+        {
+            int32_t move_id = 0;
+            SpecialMove::CastKind kind = SpecialMove::CAST_INSTANT;
+            // Wind-up left to run, in ms.
+            int32_t remaining = 0;
+            // Time until this keydown move fires again, in ms.
+            int32_t nextshot = 0;
+            bool active = false;
         };
 
         void apply_attack(const AttackResult& attack);
         void apply_move(const SpecialMove& move);
+        // Begin the cast of a move that does not go off immediately.
+        void begin_cast(const SpecialMove& move, SpecialMove::CastKind kind);
+        // Run the current cast forward one tick.
+        void update_cast();
+        // End the current cast, playing its closing animations.
+        void finish_cast();
+        // Show one of a move's own animations on the player.
+        void show_cast_effect(nl::node src);
+        // Start the cooldown a move imposes, if any.
+        void start_cooldown(const SpecialMove& move);
         void apply_use_movement(const SpecialMove& move);
         void apply_result_movement(const SpecialMove& move, const AttackResult& result);
         void apply_rush(const AttackResult& result);
@@ -96,6 +145,10 @@ namespace jrc
         void apply_special_effect(const SpecialEffect& effect);
         void apply_damage_effect(const DamageEffect& effect);
         void extract_effects(const Char& user, const SpecialMove& move, const AttackResult& result);
+        // When each struck target takes its damage, in ms after the attack is
+        // applied - one entry per damage line, in the order they arrive. Empty
+        // for a close attack, whose cadence has not been reversed.
+        std::vector<uint16_t> hit_delays(const Char& user, const AttackResult& result) const;
         std::vector<DamageNumber> place_numbers(int32_t oid, const std::vector<std::pair<int32_t, bool>>& damagelines);
         const SpecialMove& get_move(int32_t move_id);
 
@@ -111,7 +164,10 @@ namespace jrc
         Physics& physics;
 
         std::unordered_map<int32_t, Skill> skills;
+        // Remaining cooldown per move, in ms.
+        std::unordered_map<int32_t, int32_t> cooldowns;
         RegularAttack regularattack;
+        Cast cast;
         int16_t teleport_cooldown = 0;
 
         TimedQueue<AttackResult> attackresults;
@@ -121,6 +177,7 @@ namespace jrc
 
         std::list<BulletEffect> bullets;
         std::list<MovingEffect> movingeffects;
+        std::list<GroundEffect> groundeffects;
         std::list<DamageNumber> damagenumbers;
     };
 }

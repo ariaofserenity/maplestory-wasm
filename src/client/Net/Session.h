@@ -60,6 +60,15 @@ namespace jrc
         size_t length;
         size_t pos;
         bool connected;
+        // Set while a packet is being handled. A handler may block on an asset
+        // that has not been loaded yet, which unwinds this stack and lets the
+        // main loop run again; re-entering read() at that point would overwrite
+        // the buffer the suspended handler is still working through.
+        bool handling;
+        // Set when a handler switched connections, so the rest of the old
+        // connection's buffer can be dropped instead of decrypted with the new
+        // connection's keys.
+        bool reconnected;
 
 #ifdef JOURNEY_USE_ASIO
         SocketAsio socket;

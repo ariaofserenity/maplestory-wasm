@@ -428,7 +428,17 @@ namespace jrc
             break;
         }
         case KeyType::SKILL:
-            combat.use_move(action);
+            // A charging skill needs both edges: the press starts it and the
+            // release lets it go. Firing on both would use every other skill
+            // twice per press.
+            if (down)
+            {
+                combat.use_move(action);
+            }
+            else
+            {
+                combat.release_move(action);
+            }
             break;
         case KeyType::ITEM:
             player.use_item(action);

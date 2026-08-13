@@ -71,7 +71,7 @@ pip install -r web/requirements.txt
 
 ```bash
 python3 web/server.py
-python3 web/ws_proxy.py --ws-port 8080
+python3 web/ws_proxy.py --ws-port 8181
 python3 web/assets_server.py --port 8765 --directory .
 ```
 

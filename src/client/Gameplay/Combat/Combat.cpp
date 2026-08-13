@@ -25,6 +25,8 @@
 
 #include "nlnx/nx.hpp"
 
+#include "../../Util/Randomizer.h"
+
 #include <algorithm>
 
 namespace jrc
@@ -40,10 +42,52 @@ namespace jrc
         // Max ground-height delta (px) before treating a step as a wall.
         constexpr int16_t TELEPORT_WALL_THRESHOLD = 35;
 
-        // Multi-target skills resolve their targets in sequence rather than on
-        // a single frame. No WZ field encodes this cadence, so the step is a
-        // tuned constant.
+        // Multi-target close attacks resolve their targets in sequence rather
+        // than on a single frame. TryDoingMeleeAttack's cadence has not been
+        // reversed, so the step is still a tuned constant.
         constexpr uint16_t TARGET_STAGGER_MS = 75;
+
+        // How long a shot takes to cover a pixel. Both reversed attack paths
+        // multiply the horizontal gap to the target by this to work out when
+        // that target is hit.
+        constexpr double SHOT_MS_PER_PIXEL = 1.5;
+
+        // What the magic path charges per target when the skill is not one of
+        // the ids it singles out.
+        constexpr int32_t MAGIC_TARGET_STEP = 50;
+
+        // Ids the two reversed paths single out when they decide when a target
+        // is hit. Only some of these have an established name, and the client
+        // lists them numerically too.
+
+        // Shoot path: hit a flat 400 ms into the swing, every target at once.
+        constexpr int32_t SHOOT_FLAT_400_WA = 13111000;
+        // Shoot path: targets after the first trail it by 200 ms.
+        constexpr int32_t SHOOT_TRAIL_200_WH = 33101007;
+        // Shoot path: hit the moment the swing's own frame comes up.
+        constexpr int32_t SHOOT_ON_EVENT_MECH = 35121012;
+        // Magic path: hit the moment the cast's own frame comes up.
+        constexpr int32_t MAGIC_ON_EVENT[] = {
+            2121007, 2221007, 2321008, 12111003, 32121004
+        };
+        // Magic path: hit as the spell reaches each target.
+        constexpr int32_t MAGIC_TRAVELS[] = {
+            2101004, 2121003, 12111006, 22101000, 32111003
+        };
+
+        template <size_t N>
+        bool listed(const int32_t (&ids)[N], int32_t skillid)
+        {
+            return std::find(std::begin(ids), std::end(ids), skillid)
+                != std::end(ids);
+        }
+
+        // Floor on how often a charging skill may fire. A weapon whose attack
+        // stance exposes no delay would otherwise loose a volley every tick and
+        // flood the server with attack packets.
+        constexpr int32_t KEYDOWN_MIN_INTERVAL = 120;
+
+        const Randomizer randomizer;
 
         // Delay before a given target is hit. Divided by the attack speed
         // factor for the same reason Char::get_attackdelay is, so that faster
@@ -82,6 +126,11 @@ namespace jrc
         {
             be.bullet.draw(viewx, viewy, alpha);
         }
+        // Ground effects sit under everything else that is drawn here.
+        for (auto& ge : groundeffects)
+        {
+            ge.draw(viewx, viewy, alpha);
+        }
         for (auto& me : movingeffects)
         {
             me.draw(viewx, viewy, alpha);
@@ -97,30 +146,32 @@ namespace jrc
         if (teleport_cooldown > 0)
             teleport_cooldown--;
 
+        for (auto iter = cooldowns.begin(); iter != cooldowns.end(); )
+        {
+            iter->second -= Constants::TIMESTEP;
+            iter = (iter->second <= 0) ? cooldowns.erase(iter) : std::next(iter);
+        }
+
+        update_cast();
+
         attackresults.update();
         bulleteffects.update();
         damageeffects.update();
         specialeffects.update();
 
         bullets.remove_if([&](BulletEffect& mb) {
-            int32_t target_oid = mb.damageeffect.target_oid;
-            if (mobs.contains(target_oid))
-            {
-                mb.target = mobs.get_mob_body_position(target_oid);
-                bool apply = mb.bullet.update(mb.target);
-                if (apply)
-                {
-                    apply_damage_effect(mb.damageeffect);
-                }
-                return apply;
-            }
-            else
-            {
-                return mb.bullet.update(mb.target);
-            }
+            // A homing shot re-aims each tick; a straight one keeps the line it
+            // was loosed along.
+            if (!mb.straight && mobs.contains(mb.target_oid))
+                mb.target = mobs.get_mob_body_position(mb.target_oid);
+
+            return mb.bullet.update(mb.target);
         });
         movingeffects.remove_if([](MovingEffect& me) {
             return me.update();
+        });
+        groundeffects.remove_if([](GroundEffect& ge) {
+            return ge.update();
         });
         damagenumbers.remove_if([](DamageNumber& dn) {
             return dn.update();
@@ -130,8 +181,11 @@ namespace jrc
     void Combat::clear()
     {
         teleport_cooldown = 0;
+        // A cast cannot survive the map it was started on.
+        cast = {};
         // Map-anchored effects mean nothing on the next map.
         movingeffects.clear();
+        groundeffects.clear();
     }
 
     bool Combat::use_move(int32_t move_id)
@@ -139,22 +193,173 @@ namespace jrc
         if (!player.can_attack())
             return false;
 
+        // A move already charging owns the character until it is let go of.
+        if (cast.active)
+            return false;
+
         if (is_teleport_skill(move_id) && teleport_cooldown > 0)
             return false;
 
         const SpecialMove& move = get_move(move_id);
 
-        SpecialMove::ForbidReason reason = player.can_use(move);
         Weapon::Type weapontype = player.get_stats().get_weapontype();
-        switch (reason)
+        if (cooldowns.count(move_id) > 0)
         {
-        case SpecialMove::FBR_NONE:
-            apply_move(move);
-            return true;
-        default:
+            ForbidSkillMessage(SpecialMove::FBR_COOLDOWN, weapontype).drop();
+            return false;
+        }
+
+        SpecialMove::ForbidReason reason = player.can_use(move);
+        if (reason != SpecialMove::FBR_NONE)
+        {
             ForbidSkillMessage(reason, weapontype).drop();
             return false;
         }
+
+        SpecialMove::CastKind kind = move.get_cast_kind();
+        if (kind != SpecialMove::CAST_INSTANT)
+        {
+            begin_cast(move, kind);
+            return true;
+        }
+
+        apply_move(move);
+        start_cooldown(move);
+        return true;
+    }
+
+    void Combat::release_move(int32_t move_id)
+    {
+        // Only the move that is actually charging responds to its key coming up.
+        if (!cast.active || cast.move_id != move_id)
+            return;
+
+        if (cast.kind == SpecialMove::CAST_KEYDOWN)
+        {
+            finish_cast();
+            return;
+        }
+
+        // A charged skill goes off when its key comes up, whether or not the
+        // wind-up had finished. Cancelling instead made the five prepare skills
+        // - Monster Magnet, Explosion and Chakra among them - impossible to use
+        // with an ordinary keypress, since a tap never outlasts the wind-up.
+        const SpecialMove& move = get_move(cast.move_id);
+        cast = {};
+
+        apply_move(move);
+        start_cooldown(move);
+        show_cast_effect(move.get_finish_effect());
+    }
+
+    void Combat::begin_cast(const SpecialMove& move, SpecialMove::CastKind kind)
+    {
+        cast = {};
+        cast.move_id = move.get_id();
+        cast.kind = kind;
+        cast.active = true;
+
+        // Both kinds of cast are mirrored to everyone else in the map so their
+        // clients can show the same wind-up. Every skill in the game files that
+        // has a prepare or keydown node is one the server recognises here.
+        int32_t level = player.get_skills().get_level(cast.move_id);
+        SkillEffectPacket(
+            cast.move_id, level,
+            static_cast<uint8_t>(player.get_integer_attackspeed())
+        ).dispatch();
+
+        if (kind == SpecialMove::CAST_PREPARE)
+        {
+            show_cast_effect(move.get_prepare_effect());
+            cast.remaining = move.get_prepare_time();
+            return;
+        }
+
+        show_cast_effect(move.get_keydown_effect());
+        // The first shot goes off immediately; the rest follow the weapon's
+        // attack cadence for as long as the key is held.
+        cast.nextshot = 0;
+    }
+
+    void Combat::update_cast()
+    {
+        if (!cast.active)
+            return;
+
+        // A character that can no longer act drops whatever it was charging.
+        if (!player.can_attack() && cast.kind == SpecialMove::CAST_PREPARE)
+        {
+            cast = {};
+            return;
+        }
+
+        const SpecialMove& move = get_move(cast.move_id);
+
+        if (cast.kind == SpecialMove::CAST_PREPARE)
+        {
+            cast.remaining -= Constants::TIMESTEP;
+            if (cast.remaining > 0)
+                return;
+
+            // The wind-up is over, so the skill goes off now.
+            int32_t move_id = cast.move_id;
+            cast = {};
+            apply_move(move);
+            start_cooldown(move);
+            show_cast_effect(get_move(move_id).get_finish_effect());
+            return;
+        }
+
+        cast.nextshot -= Constants::TIMESTEP;
+        if (cast.nextshot > 0)
+            return;
+
+        if (player.can_use(move) != SpecialMove::FBR_NONE)
+        {
+            // Out of mp or ammunition part way through: stop charging rather
+            // than firing shots the server will reject.
+            finish_cast();
+            return;
+        }
+
+        apply_move(move);
+        // One volley per attack animation. The delay already accounts for the
+        // weapon's speed, and the floor keeps a missing delay from turning into
+        // a shot every tick.
+        cast.nextshot = std::max<int32_t>(
+            player.get_attackdelay(0), KEYDOWN_MIN_INTERVAL
+        );
+    }
+
+    void Combat::finish_cast()
+    {
+        if (!cast.active)
+            return;
+
+        const SpecialMove& move = get_move(cast.move_id);
+        cast = {};
+
+        show_cast_effect(move.get_keydown_end_effect());
+        show_cast_effect(move.get_finish_effect());
+        start_cooldown(move);
+    }
+
+    void Combat::show_cast_effect(nl::node src)
+    {
+        if (!src)
+            return;
+
+        Animation animation = src;
+        player.show_attack_effect(animation, src["z"]);
+    }
+
+    void Combat::start_cooldown(const SpecialMove& move)
+    {
+        int32_t move_id = move.get_id();
+        int32_t level = player.get_skills().get_level(move_id);
+        int32_t cooldown = move.get_cooldown(level);
+        if (cooldown > 0)
+            cooldowns[move_id] = cooldown;
     }
 
     void Combat::apply_move(const SpecialMove& move)
@@ -362,22 +567,31 @@ namespace jrc
     void Combat::apply_bullet_effect(const BulletEffect& effect)
     {
         bullets.push_back(effect);
-        if (bullets.back().bullet.settarget(effect.target))
+        if (bullets.back().bullet.settarget(effect.target, effect.flighttime))
         {
-            apply_damage_effect(effect.damageeffect);
+            // Already touching the target: there is no flight to show. The
+            // damage is on its own timer and lands regardless.
             bullets.pop_back();
         }
     }
 
     void Combat::apply_special_effect(const SpecialEffect& effect)
     {
-        if (effect.travel.x() != 0 || effect.travel.y() != 0)
+        if (effect.onmap)
         {
-            // Travelling copies are anchored to the map, not the caster, so
-            // they play out where the skill was aimed.
+            // An emitted copy plays out where the skill was aimed, so it holds a
+            // map position rather than an offset from the caster.
             movingeffects.emplace_back(
                 effect.animation, effect.origin, effect.travel,
                 effect.duration, effect.flip
+            );
+            return;
+        }
+
+        if (effect.lifetime > 0)
+        {
+            groundeffects.emplace_back(
+                effect.animation, effect.origin, effect.lifetime, effect.flip
             );
             return;
         }
@@ -433,6 +647,88 @@ namespace jrc
         }
     }
 
+    std::vector<uint16_t> Combat::hit_delays(const Char& user, const AttackResult& result) const
+    {
+        std::vector<uint16_t> delays;
+
+        // Only the shoot and magic paths have been reversed. A close attack
+        // keeps the cadence we approximate for it.
+        if (result.type == Attack::CLOSE)
+            return delays;
+
+        // Where every delay starts. The client takes how far into the action
+        // the frame flagged as its event sits and scales it by the length the
+        // animation actually runs for; our attack-frame delays are already
+        // scaled by attack speed, so this is that same value. The shoot path
+        // then overrides it outright for a handful of skills, which is not
+        // reproduced here - none of them are ones we render.
+        const int32_t base = user.get_attackdelay(0);
+        const int16_t from = user.get_position().x();
+
+        // What the client charges most skills on both paths: the time the shot
+        // needs to cross the gap to its target.
+        auto travel = [&](int32_t oid) {
+            int16_t at = mobs.contains(oid)
+                ? mobs.get_mob_body_position(oid).x()
+                : from;
+            int32_t distance = std::abs(at - from);
+            return base + static_cast<int32_t>(distance * SHOT_MS_PER_PIXEL);
+        };
+
+        delays.reserve(result.damagelines.size());
+        for (size_t i = 0; i < result.damagelines.size(); i++)
+        {
+            const int32_t oid = result.damagelines[i].first;
+            const int32_t step = static_cast<int32_t>(i);
+            int32_t delay;
+
+            if (result.type == Attack::MAGIC)
+            {
+                if (listed(MAGIC_ON_EVENT, result.skill))
+                    delay = base;
+                else if (listed(MAGIC_TRAVELS, result.skill))
+                    delay = travel(oid);
+                else
+                    delay = base + step * MAGIC_TARGET_STEP;
+            }
+            else
+            {
+                switch (result.skill)
+                {
+                case SkillId::ARROW_RAIN:
+                case SkillId::ARROW_ERUPTION:
+                case SHOOT_FLAT_400_WA:
+                    // The arrows land on their own schedule, the same one for
+                    // every target, however far off it is.
+                    delay = base + 400;
+                    break;
+                case SHOOT_ON_EVENT_MECH:
+                    delay = base;
+                    break;
+                case SkillId::ARROW_BOMB:
+                case SHOOT_TRAIL_200_WH:
+                    // The shot itself connects; the blast catches everything
+                    // else 200 ms later.
+                    delay = (i == 0) ? travel(oid) : delays.front() + 200;
+                    break;
+                case SkillId::INFERNO:
+                case SkillId::BLIZZARD_SNIPER:
+                    // Likewise, except the spread cascades outwards from where
+                    // the shot connected.
+                    delay = (i == 0)
+                        ? travel(oid)
+                        : delays.front() + 120 + step * 30;
+                    break;
+                default:
+                    delay = travel(oid);
+                }
+            }
+
+            delays.push_back(static_cast<uint16_t>(std::max(delay, 0)));
+        }
+        return delays;
+    }
+
     void Combat::extract_effects(const Char& user, const SpecialMove& move, const AttackResult& result)
     {
         AttackUser attackuser = {
@@ -441,118 +737,310 @@ namespace jrc
             user.is_twohanded(),
             !result.toleft
         };
-        // Area skills paint their animation over the ground they cover; this
-        // runs for both branches below since it is independent of whether the
-        // move also throws a projectile.
-        for (const SpecialSpawn& spawn : move.get_special_spawns(user))
+        // The area animations belong where the skill landed rather than where
+        // the caster is standing, but on the caster's floor so a tile sits on
+        // the ground rather than in the air.
+        Point<int16_t> anchor = user.get_position();
+        if (mobs.contains(result.first_oid))
         {
-            // The drift is stored as a forward distance; aim it at the side
-            // the caster is facing.
-            Point<int16_t> travel = spawn.travel;
-            if (result.toleft)
-                travel = { static_cast<int16_t>(-travel.x()), travel.y() };
+            anchor = {
+                mobs.get_mob_position(result.first_oid).x(),
+                anchor.y()
+            };
+        }
 
-            bool travels = travel.x() != 0 || travel.y() != 0;
-            // Travelling copies need a map position; stationary ones are drawn
-            // relative to the character and take the raw offset.
-            Point<int16_t> origin = travels
-                ? user.get_position() + spawn.offset
-                : spawn.offset;
+        SpecialMove::AreaEffect area = move.get_area_effect(user);
+        // When each target takes its damage.
+        const std::vector<uint16_t> delays = hit_delays(user, result);
+        const uint16_t area_delay = user.get_attackdelay(0);
+        // When the area animation starts. The client hands the registrar the
+        // first target's hit delay, so the stream of copies runs in step with
+        // the damage rather than the moment the attack was applied - that gap
+        // is what made Arrow Rain's arrows fall ahead of everything else.
+        const uint16_t hit_delay = delays.empty() ? area_delay : delays.front();
+        // A skill that states when its projectile leaves the caster holds the
+        // shot back by that much.
+        const uint16_t ball_delay = move.get_ball_delay();
+
+        // Every one of the shoot path's falling emitters sits behind a check
+        // that the swing found something, so a volley that connects with
+        // nothing paints no arrows.
+        if (area.kind == SpecialMove::EMIT_FALLING && result.damagelines.empty())
+            area.kind = SpecialMove::EMIT_NONE;
+
+        // Where the emitter's box sits. The client picks this per skill: on
+        // the caster, on the point the shot first connected, or once per
+        // struck monster.
+        std::vector<Point<int16_t>> anchors;
+        switch (area.anchor)
+        {
+        case SpecialMove::ANCHOR_IMPACT:
+            if (mobs.contains(result.first_oid))
+                anchors.push_back(mobs.get_mob_body_position(result.first_oid));
+            break;
+        case SpecialMove::ANCHOR_PER_MOB:
+            for (auto& line : result.damagelines)
+            {
+                if (mobs.contains(line.first))
+                    anchors.push_back(mobs.get_mob_body_position(line.first));
+            }
+            break;
+        default:
+            anchors.push_back(user.get_position());
+        }
+
+        for (Point<int16_t> at : anchors)
+        {
+            Rectangle<int16_t> box{
+                static_cast<int16_t>(at.x() + area.spawnbox.l()),
+                static_cast<int16_t>(at.x() + area.spawnbox.r()),
+                static_cast<int16_t>(at.y() + area.spawnbox.t() - area.lifttop),
+                static_cast<int16_t>(at.y() + area.spawnbox.b() - area.liftbottom)
+            };
+
+            int16_t boxw = box.width();
+            int16_t boxh = box.height();
+            const int32_t step = std::max<int32_t>(area.interval, 1);
+
+            if (area.kind == SpecialMove::EMIT_FALLING)
+            {
+                // count copies every interval until duration has elapsed. Each
+                // spawns at a random point in the box and travels (x, y) over
+                // fall ms, with the jitter the client applies - the jitter is
+                // what makes the stream read as rain rather than a volley.
+                // start and duration are both offsets from the hit delay: the
+                // registrar adds the caller's delay to each of them.
+                const int16_t reachx = result.toleft
+                    ? static_cast<int16_t>(-area.travelx)
+                    : area.travelx;
+
+                const int32_t first = hit_delay + area.start;
+                const int32_t last = hit_delay + area.duration;
+
+                for (int32_t tick = first; tick <= last; tick += step)
+                {
+                    for (int16_t i = 0; i < area.count; i++)
+                    {
+                        Point<int16_t> from{
+                            static_cast<int16_t>(box.l()
+                                + (boxw > 0 ? randomizer.next_int<int32_t>(boxw) : 0)),
+                            static_cast<int16_t>(box.t()
+                                + (boxh > 0 ? randomizer.next_int<int32_t>(boxh) : 0))
+                        };
+
+                        int32_t dy = area.travely;
+                        if (area.travelx != 0 && area.travely != 0)
+                        {
+                            dy = (20 - randomizer.next_int<int32_t>(41)) * area.travelx
+                                 / area.travely + area.travely;
+                        }
+
+                        int32_t fall = area.falltime
+                            + randomizer.next_int<int32_t>(300) - 150;
+                        if (fall < 1)
+                            fall = 1;
+
+                        nl::node variant = area.variants[
+                            randomizer.next_int<size_t>(area.variants.size())
+                        ];
+
+                        specialeffects.emplace(
+                            static_cast<uint16_t>(tick), user.get_oid(),
+                            Animation{ variant }, from,
+                            Point<int16_t>{ reachx, static_cast<int16_t>(dy) },
+                            static_cast<uint16_t>(fall), uint16_t{ 0 },
+                            static_cast<int8_t>(variant["z"]), !result.toleft, true
+                        );
+                    }
+                }
+            }
+            else if (area.kind == SpecialMove::EMIT_EXPLOSION)
+            {
+                // The copies burst outward: the band they may appear in starts
+                // at a sixth of the box and widens every tick, and each copy
+                // plays once where it lands rather than travelling. The
+                // explosion registrar takes no delay from its caller, so this
+                // one starts the moment the attack is applied rather than with
+                // the damage.
+                int32_t curw = boxw * 5 / 6;
+                int32_t curh = boxh * 5 / 6;
+                Point<int16_t> centre{
+                    static_cast<int16_t>((box.l() + box.r()) / 2),
+                    static_cast<int16_t>((box.t() + box.b()) / 2)
+                };
+
+                for (int32_t tick = area.start; tick <= area.duration; tick += step)
+                {
+                    int32_t dw = boxw - curw;
+                    int32_t dh = boxh - curh;
+                    curw = curw * 3 / 4;
+                    curh = curh * 3 / 4;
+
+                    for (int16_t i = 0; i < area.count; i++)
+                    {
+                        Point<int16_t> from{
+                            static_cast<int16_t>(centre.x()
+                                + (dw > 0 ? randomizer.next_int<int32_t>(dw) - dw / 2 : 0)),
+                            static_cast<int16_t>(centre.y()
+                                + (dh > 0 ? randomizer.next_int<int32_t>(dh) - dh / 2 : 0))
+                        };
+
+                        nl::node variant = area.variants[
+                            randomizer.next_int<size_t>(area.variants.size())
+                        ];
+
+                        // Zero travel and zero duration means it sits where it
+                        // appeared and lasts as long as its own animation.
+                        specialeffects.emplace(
+                            static_cast<uint16_t>(tick), user.get_oid(),
+                            Animation{ variant }, from,
+                            Point<int16_t>{ 0, 0 }, uint16_t{ 0 }, uint16_t{ 0 },
+                            static_cast<int8_t>(variant["z"]), !result.toleft, true
+                        );
+                    }
+                }
+            }
+            else if (area.kind == SpecialMove::EMIT_ONCE && area.special)
+            {
+                specialeffects.emplace(
+                    hit_delay, user.get_oid(), Animation{ area.special },
+                    at - user.get_position(),
+                    Point<int16_t>{ 0, 0 }, uint16_t{ 0 }, uint16_t{ 0 },
+                    static_cast<int8_t>(area.special["z"]), !result.toleft, false
+                );
+            }
+        }
+
+        if (area.tile && area.lifetime > 0)
+        {
+            // The shoot path lays its tiles on the first target's hit delay;
+            // the magic path passes the foothold registrar a flat 180 ms.
+            const uint16_t tile_delay = (area.kind == SpecialMove::EMIT_EXPLOSION)
+                ? uint16_t{ 180 }
+                : hit_delay;
 
             specialeffects.emplace(
-                spawn.delay, user.get_oid(), spawn.animation, origin,
-                travel, spawn.duration, spawn.z, !result.toleft
+                tile_delay, user.get_oid(), Animation{ area.tile }, anchor,
+                Point<int16_t>{ 0, 0 }, uint16_t{ 0 },
+                area.lifetime, int8_t{ 0 }, !result.toleft, true
             );
         }
 
-        // Skills whose effect arrives late (arrows still falling) must not show
-        // their damage while the caster is mid-animation.
-        const uint16_t damage_delay = move.get_damage_delay();
+        // A skill that draws no projectile of its own still arms itself with an
+        // arrow and still spends one - Arrow Rain paints its own volley, so a
+        // stray arrow flying off forwards is the client's shot leaking through.
+        const bool bullet = result.bullet && !shoot_hides_bullet(move.get_id());
 
-        if (result.bullet)
+        if (bullet)
         {
-            auto bullet_delay = [&](size_t index, size_t count) {
-                uint16_t delay = user.get_attackdelay(index, count);
-                if (index > 0 && delay == 0)
-                {
-                    // Regular ranged stances often expose only one attack frame.
-                    // Add a small fallback stagger so multi-star skills remain visible.
-                    delay = static_cast<uint16_t>(user.get_attackdelay(0) + index * 45);
-                }
-                return delay;
+            // Shots of one volley are fanned apart vertically, or they overlap
+            // exactly and a two-arrow skill reads as a single arrow.
+            auto bullet_fan = [](Point<int16_t> base, size_t index, size_t count) {
+                int32_t steps = static_cast<int32_t>(index) * 2
+                    - static_cast<int32_t>(count > 0 ? count - 1 : 0);
+                return base + Point<int16_t>(0, static_cast<int16_t>(steps * 7));
             };
 
-            auto bullet_target = [](Point<int16_t> base, size_t index, size_t count) {
-                int16_t spread = static_cast<int16_t>(index * 12);
-                int16_t center = static_cast<int16_t>((count > 0 ? count - 1 : 0) * 6);
-                return base + Point<int16_t>(0, spread - center);
+            // Most volleys leave together; the few that do not have their own
+            // gap, and it does not depend on the attack animation's frames.
+            const uint16_t volley_gap = shoot_bullet_delay(move.get_id(), result.bullet);
+
+            auto bullet_delay = [&](size_t index, size_t) {
+                return static_cast<uint16_t>(
+                    user.get_attackdelay(0) + index * volley_gap
+                );
             };
+
+            // A ranged attack looses one projectile per shot the skill fires -
+            // its bullet count - and not one per monster it happens to reach.
+            // An arrow that passes through six mobs is still a single arrow.
+            const size_t shots = std::max<size_t>(result.hitcount, 1);
 
             size_t target_index = 0;
             for (auto& line : result.damagelines)
             {
                 int32_t oid = line.first;
-                if (mobs.contains(oid))
+                if (!mobs.contains(oid))
                 {
-                    std::vector<DamageNumber> numbers = place_numbers(oid, line.second);
-                    Point<int16_t> target = mobs.get_mob_body_position(oid);
-                    uint16_t stagger = target_stagger(user, target_index);
-
-                    size_t i = 0;
-                    for (auto& number : numbers)
-                    {
-                        DamageEffect effect{
-                            attackuser,
-                            number,
-                            line.second[i].first,
-                            result.toleft,
-                            oid,
-                            move.get_id()
-                        };
-                        Bullet bullet{
-                            move.get_bullet(user, result.bullet),
-                            user.get_position(),
-                            result.toleft
-                        };
-                        bulleteffects.emplace(
-                            bullet_delay(i, numbers.size()) + stagger + damage_delay,
-                            std::move(effect),
-                            bullet,
-                            bullet_target(target, i, numbers.size())
-                        );
-                        i++;
-                    }
+                    target_index++;
+                    continue;
                 }
+
+                const uint16_t when = target_index < delays.size()
+                    ? delays[target_index]
+                    : area_delay;
+
+                std::vector<DamageNumber> numbers = place_numbers(oid, line.second);
+                for (size_t i = 0; i < numbers.size(); i++)
+                {
+                    // Each line lands as the shot that carries it passes. The
+                    // client keeps one delay per monster and pops all of them
+                    // together, but a volley that leaves in sequence and lands
+                    // in one lump does not read as four arrows hitting. A mob
+                    // struck more often than the skill has shots folds the
+                    // extra hits onto the last one.
+                    const size_t shot = std::min(i, shots - 1);
+                    const uint16_t lands = static_cast<uint16_t>(
+                        when + shot * volley_gap
+                    );
+
+                    damageeffects.emplace(
+                        lands, attackuser, numbers[i], line.second[i].first,
+                        result.toleft, oid, move.get_id()
+                    );
+                }
+
                 target_index++;
             }
 
-            if (result.damagelines.empty())
+            // The shot is aimed at the monster the attack found, at that
+            // monster's own height - which is what angles it up or down a
+            // slope. With nothing found it flies flat to the far end of what
+            // the attack reaches, so a shot that stops short is the honest
+            // picture of a reach that does not get there.
+            const int16_t reach = result.reach > 0
+                ? result.reach
+                : resolve_shoot_reach(user);
+            const Point<int16_t> muzzle{
+                user.get_position().x(),
+                static_cast<int16_t>(user.get_position().y() - Attack::MUZZLE_HEIGHT)
+            };
+
+            const bool connects = mobs.contains(result.first_oid);
+            const Point<int16_t> aim = connects
+                ? mobs.get_mob_body_position(result.first_oid)
+                : muzzle + Point<int16_t>(
+                    result.toleft ? static_cast<int16_t>(-reach) : reach, 0
+                );
+
+            for (size_t i = 0; i < shots; i++)
             {
-                int16_t xshift = result.toleft ? -400 : 400;
-                Point<int16_t> target = user.get_position() + Point<int16_t>(xshift, -26);
-                for (uint8_t i = 0; i < result.hitcount; i++)
-                {
-                    DamageEffect effect{
-                        attackuser,
-                        {},
-                        0,
-                        false,
-                        0,
-                        0
-                    };
-                    Bullet bullet{
-                        move.get_bullet(user, result.bullet),
-                        user.get_position(),
-                        result.toleft
-                    };
-                    bulleteffects.emplace(
-                        bullet_delay(i, result.hitcount) + damage_delay,
-                        std::move(effect),
-                        bullet,
-                        bullet_target(target, i, result.hitcount)
-                    );
-                }
+                Point<int16_t> destination = bullet_fan(aim, i, shots);
+                Point<int16_t> flightpath = destination - muzzle;
+                const double distance = std::sqrt(
+                    static_cast<double>(flightpath.x()) * flightpath.x()
+                    + static_cast<double>(flightpath.y()) * flightpath.y()
+                );
+
+                Bullet bullet{
+                    move.get_bullet(user, result.bullet),
+                    user.get_position(),
+                    result.toleft
+                };
+
+                bulleteffects.emplace(
+                    static_cast<uint16_t>(bullet_delay(i, shots) + ball_delay),
+                    bullet,
+                    destination,
+                    connects ? result.first_oid : 0,
+                    // The same 1.5 ms per pixel the damage delays are charged
+                    // at, so a shot reaches a monster on the frame that
+                    // monster takes its damage.
+                    static_cast<uint16_t>(distance * SHOT_MS_PER_PIXEL),
+                    !connects
+                );
             }
+
         }
         else
         {
@@ -564,15 +1052,21 @@ namespace jrc
                 {
                     std::vector<DamageNumber> numbers = place_numbers(oid, line.second);
 
-                    // Each successive target lands a step later, so the hits
-                    // cascade outwards instead of all popping on one frame.
+                    // A reversed path knows exactly when this monster is hit,
+                    // and every line it takes lands on that one frame. A close
+                    // attack has no such table, so its hits are still spread
+                    // over the swing and cascade outwards target by target.
+                    const bool timed = target_index < delays.size();
                     uint16_t stagger = target_stagger(user, target_index);
 
                     size_t i = 0;
                     for (auto& number : numbers)
                     {
                         damageeffects.emplace(
-                            user.get_attackdelay(i, numbers.size()) + stagger + damage_delay,
+                            timed
+                                ? delays[target_index]
+                                : static_cast<uint16_t>(
+                                    user.get_attackdelay(i, numbers.size()) + stagger),
                             attackuser,
                             number,
                             line.second[i].first,

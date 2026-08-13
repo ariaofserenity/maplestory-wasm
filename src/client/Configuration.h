@@ -170,7 +170,7 @@ namespace jrc
     // WebSocket Proxy Port
     struct ProxyPort : public Configuration::StringEntry
     {
-        ProxyPort() : StringEntry("ProxyPort", "8080") {}
+        ProxyPort() : StringEntry("ProxyPort", "8181") {}
     };
 
     // WebSocket / WSS protocol

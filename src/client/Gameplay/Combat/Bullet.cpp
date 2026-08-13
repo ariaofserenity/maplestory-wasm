@@ -17,6 +17,10 @@
 //////////////////////////////////////////////////////////////////////////////
 #include "Bullet.h"
 
+#include "../../Constants.h"
+
+#include <cmath>
+
 namespace jrc
 {
     Bullet::Bullet(Animation a, Point<int16_t> origin, bool toleft)
@@ -30,11 +34,15 @@ namespace jrc
     void Bullet::draw(double viewx, double viewy, float alpha) const
     {
         Point<int16_t> bulletpos = moveobj.get_absolute(viewx, viewy, alpha);
-        DrawArgument args(bulletpos, flip);
+        // A shot points along the line it is flying. The reference client only
+        // spins bullets that ask for it, by rotatePeriod, and never turns one
+        // towards what it was fired at - but an arrow angled up a slope while
+        // still drawn level reads as a bug.
+        DrawArgument args(pitch, bulletpos, flip, 1.0f);
         animation.draw(args, alpha);
     }
 
-    bool Bullet::settarget(Point<int16_t> target)
+    bool Bullet::settarget(Point<int16_t> target, uint16_t flighttime)
     {
         double xdelta = target.x() - moveobj.crnt_x();
         double ydelta = target.y() - moveobj.crnt_y();
@@ -42,6 +50,21 @@ namespace jrc
             return true;
 
         flip = xdelta > 0.0;
+
+        if (flighttime > 0)
+        {
+            // Told when to arrive, the shot covers the gap in that time and
+            // ignores the speed band - it has to land with the damage it was
+            // fired for, however far away that target is.
+            double steps = static_cast<double>(flighttime) / Constants::TIMESTEP;
+            if (steps < 1.0)
+                steps = 1.0;
+
+            moveobj.hspeed = xdelta / steps;
+            moveobj.vspeed = moveobj.hspeed * ydelta / xdelta;
+            set_pitch(xdelta, ydelta);
+            return false;
+        }
 
         moveobj.hspeed = xdelta / 32;
         if (xdelta > 0.0)
@@ -67,7 +90,18 @@ namespace jrc
             }
         }
         moveobj.vspeed = moveobj.hspeed * ydelta / xdelta;
+        set_pitch(xdelta, ydelta);
         return false;
+    }
+
+    void Bullet::set_pitch(double xdelta, double ydelta)
+    {
+        // The quad turns about its own centre in screen space, where y grows
+        // downwards, so a positive angle is a clockwise turn. Flying right that
+        // drops the head; flying left the sprite is mirrored and the same turn
+        // raises it, so the sign follows the direction of travel.
+        double drop = std::atan2(ydelta, std::abs(xdelta));
+        pitch = static_cast<float>(flip ? drop : -drop);
     }
 
     bool Bullet::update(Point<int16_t> target)

@@ -71,6 +71,11 @@ namespace jrc
 
     private:
         std::vector<int32_t> find_closest(Rectangle<int16_t> range, Point<int16_t> origin, uint8_t mobcount) const;
+        // Roll up everything inside a finished attack box into a result.
+        AttackResult collect_targets(const Attack& attack, Rectangle<int16_t> range, Point<int16_t> origin);
+        // Find the one monster a shot connects with, and whatever its burst
+        // catches around that monster.
+        AttackResult shoot_wedge(const Attack& attack, Point<int16_t> muzzle);
 
         MapObjects mobs;
 

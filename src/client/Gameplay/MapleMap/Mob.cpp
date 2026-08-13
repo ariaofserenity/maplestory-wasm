@@ -14,6 +14,14 @@
 
 namespace jrc
 {
+    namespace
+    {
+        // How long a shove takes to play out, in ms. Nothing in the game files
+        // states it and the reference client works from a level data field the
+        // v83 skills do not carry, so it is tuned to the hit reaction's length.
+        constexpr uint16_t KNOCKBACK_TIME = 170;
+    }
+
     Mob::Mob(int32_t        oid,
              int32_t        mid,
              int8_t         mode,
@@ -633,21 +641,29 @@ namespace jrc
             return;
         }
 
+        // Where a hit animation anchors on the monster. The reference client
+        // branches on this exact set; 1, 2 and 3 were previously empty cases,
+        // which silently dropped every effect using them onto the monster's
+        // origin - 41 skills in the game files, Big Bang and Explosion among
+        // them.
         Point<int16_t> shift;
         switch (pos)
         {
-        case 0:
-            shift = get_body_position({});
-            break;
         case 1:
+            // Anchored on the monster's head.
+            shift = get_head_position({});
             break;
         case 2:
+            // Centred on the monster's body, relative to its origin.
+            shift = get_body_position({});
             break;
         case 3:
+            // The monster's own control point, which is its position.
             break;
+        case 0:
         case 4:
-            break;
         default:
+            // Drawn at the monster's position.
             break;
         }
         effects.add(animation, { shift, f }, z);
@@ -771,6 +787,18 @@ namespace jrc
             update_movement();
             awaitdeath = true;
         }
+    }
+
+    void Mob::push_back(int16_t distance, bool toleft)
+    {
+        // Only the client that steers a monster may move it; anywhere else the
+        // shove would be undone by the next position the server sends.
+        if (!control || !is_alive())
+            return;
+
+        double target = phobj.crnt_x() + (toleft ? -distance : distance);
+        phobj.movexuntil(target, KNOCKBACK_TIME);
+        phobj.set_flag(PhysicsObject::TURNATEDGES);
     }
 
     MobAttack Mob::create_touch_attack() const

@@ -109,26 +109,157 @@ namespace jrc
     {
         Point<int16_t> origin    = attack.origin;
         Rectangle<int16_t> range = attack.range;
-        int16_t hrange = static_cast<int16_t>(range.l() * attack.hrange);
+        // A fired attack does not use the rect at all: the reference client
+        // builds a line at the muzzle running out to the reach and widens it
+        // by the skill's own vertical adjustment, which is zero for most of
+        // them. The rect a shoot skill carries describes the area its burst
+        // covers where it lands, not what the shot can reach on the way.
+        if (attack.linear && attack.reach > 0)
+        {
+            const int16_t muzzley = static_cast<int16_t>(
+                origin.y() - Attack::MUZZLE_HEIGHT
+            );
+
+            if (!attack.rectsearch)
+            {
+                return shoot_wedge(attack, { origin.x(), muzzley });
+            }
+
+            int16_t top = static_cast<int16_t>(muzzley - attack.vadjust);
+            int16_t bottom = static_cast<int16_t>(muzzley + 1 + attack.vadjust);
+
+            range = attack.toleft
+                ? Rectangle<int16_t>{
+                    static_cast<int16_t>(origin.x() - attack.reach),
+                    origin.x(), top, bottom }
+                : Rectangle<int16_t>{
+                    origin.x(),
+                    static_cast<int16_t>(origin.x() + attack.reach),
+                    top, bottom };
+
+            return collect_targets(attack, range, origin);
+        }
+
+        int16_t l = range.l();
+        int16_t r = range.r();
+        if (attack.reach > 0)
+        {
+            l = static_cast<int16_t>(-attack.reach);
+            r = 0;
+        }
+
+        // Every rect in the game files is written facing left, and adjust_rect
+        // negates and swaps its x edges when the character faces right - the
+        // mirror is on the right branch, not the left. It makes no difference
+        // to the skill rects, which are symmetric about x, but an afterimage's
+        // is not: its trail runs from -w to 0, so mirroring it the wrong way
+        // put the whole box behind the character.
         if (attack.toleft)
         {
             range = {
-                origin.x() + hrange,
-                origin.x() + range.r(),
-                origin.y() + range.t(),
-                origin.y() + range.b()
+                static_cast<int16_t>(origin.x() + l),
+                static_cast<int16_t>(origin.x() + r),
+                static_cast<int16_t>(origin.y() + range.t()),
+                static_cast<int16_t>(origin.y() + range.b())
             };
         }
         else
         {
             range = {
-                origin.x() - range.r(),
-                origin.x() - hrange,
-                origin.y() + range.t(),
-                origin.y() + range.b()
+                static_cast<int16_t>(origin.x() - r),
+                static_cast<int16_t>(origin.x() - l),
+                static_cast<int16_t>(origin.y() + range.t()),
+                static_cast<int16_t>(origin.y() + range.b())
             };
         }
 
+        return collect_targets(attack, range, origin);
+    }
+
+    AttackResult MapMobs::shoot_wedge(const Attack& attack, Point<int16_t> muzzle)
+    {
+        AttackResult result = attack;
+
+        // The reference client walks outward from the muzzle in 20 px slices,
+        // each one a band reaching a quarter of the distance travelled above
+        // and below the muzzle, and takes the first monster any of them
+        // touches. A shot therefore forgives more height the further it goes,
+        // and hits one monster however many stand behind it.
+        constexpr int16_t SLICE = 20;
+        const int16_t step = attack.toleft
+            ? static_cast<int16_t>(-SLICE)
+            : SLICE;
+
+        int32_t first = 0;
+        Point<int16_t> at;
+        for (int16_t travelled = 0; travelled < attack.reach && !first;
+             travelled += SLICE)
+        {
+            int16_t x = static_cast<int16_t>(
+                muzzle.x() + (attack.toleft ? -travelled : travelled)
+            );
+            int16_t far = static_cast<int16_t>(x + step);
+            int16_t spread = static_cast<int16_t>(travelled / SHOOT_WEDGE_SLOPE);
+
+            Rectangle<int16_t> slice{
+                std::min(x, far), std::max(x, far),
+                static_cast<int16_t>(muzzle.y() - spread),
+                static_cast<int16_t>(muzzle.y() + spread + 1)
+            };
+
+            for (int32_t oid : find_closest(slice, muzzle, 1))
+            {
+                first = oid;
+                break;
+            }
+        }
+
+        if (!first)
+            return result;
+
+        Optional<Mob> hit = mobs.get(first);
+        if (!hit)
+            return result;
+
+        at = hit->get_body_position();
+        result.damagelines.emplace_back(first, hit->calculate_damage(attack));
+        result.mobcount++;
+
+        // Splash skills then take whatever else stands inside the level's rect
+        // around the monster the shot found.
+        if (attack.splash && attack.mobcount > 1 && !attack.range.empty())
+        {
+            Rectangle<int16_t> around{
+                static_cast<int16_t>(at.x() + attack.range.l()),
+                static_cast<int16_t>(at.x() + attack.range.r()),
+                static_cast<int16_t>(at.y() + attack.range.t()),
+                static_cast<int16_t>(at.y() + attack.range.b())
+            };
+
+            for (int32_t oid : find_closest(around, at, attack.mobcount))
+            {
+                if (oid == first)
+                    continue;
+
+                if (Optional<Mob> mob = mobs.get(oid))
+                {
+                    result.damagelines.emplace_back(oid, mob->calculate_damage(attack));
+                    result.mobcount++;
+                }
+
+                if (result.mobcount >= attack.mobcount)
+                    break;
+            }
+        }
+
+        result.first_oid = result.damagelines.front().first;
+        result.last_oid = result.damagelines.back().first;
+        return result;
+    }
+
+    AttackResult MapMobs::collect_targets(const Attack& attack,
+        Rectangle<int16_t> range, Point<int16_t> origin)
+    {
         AttackResult result = attack;
         // find_closest returns targets sorted by distance; appending in that
         // order keeps the sweep running from the attacker outwards.

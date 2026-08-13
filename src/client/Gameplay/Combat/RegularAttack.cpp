@@ -17,13 +17,30 @@
 //////////////////////////////////////////////////////////////////////////////
 #include "RegularAttack.h"
 
+#include "../../Data/BulletData.h"
+
 namespace jrc
 {
     void RegularAttack::apply_useeffects(Char&) const {}
 
     void RegularAttack::apply_actions(Char& user, Attack::Type type) const
     {
-        action.apply(user, type);
+        // A ranged weapon has no stance for a close attack, which is what a
+        // degenerate swing is.
+        bool degenerate;
+        switch (user.get_weapontype())
+        {
+        case Weapon::BOW:
+        case Weapon::CROSSBOW:
+        case Weapon::CLAW:
+        case Weapon::GUN:
+            degenerate = type != Attack::RANGED;
+            break;
+        default:
+            degenerate = false;
+        }
+
+        user.attack(degenerate);
     }
 
     void RegularAttack::apply_stats(const Char& user, Attack& attack) const
@@ -37,13 +54,17 @@ namespace jrc
         {
             attack.range = user.get_afterimage().get_range();
         }
+        else
+        {
+            attack.reach = resolve_shoot_reach(user);
+        }
     }
 
     void RegularAttack::apply_hiteffects(const AttackUser&, Mob&) const {}
 
-    Animation RegularAttack::get_bullet(const Char& user, int32_t bulletid) const
+    Animation RegularAttack::get_bullet(const Char&, int32_t bulletid) const
     {
-        return bullet.get(user, bulletid);
+        return BulletData::get(bulletid).get_animation();
     }
 
     bool RegularAttack::is_attack() const

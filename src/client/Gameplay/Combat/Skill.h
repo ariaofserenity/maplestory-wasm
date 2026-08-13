@@ -18,18 +18,16 @@
 #pragma once
 #include "SpecialMove.h"
 
-#include "SkillAction.h"
-#include "SkillBullet.h"
 #include "SkillSound.h"
-#include "SkillHitEffect.h"
-#include "SkillUseEffect.h"
-#include "SkillSpecialEffect.h"
 
 #include <memory>
 
 namespace jrc
 {
     // The skill implementation of special move.
+    //
+    // All animation choices are delegated to SkillData, which resolves them the
+    // way the reference client does. This class only decides when to ask.
     class Skill : public SpecialMove
     {
     public:
@@ -40,9 +38,16 @@ namespace jrc
         void apply_stats(const Char& user, Attack& attack) const override;
         void apply_hiteffects(const AttackUser& user, Mob& target) const override;
         Animation get_bullet(const Char& user, int32_t bulletid) const override;
-        std::vector<SpecialSpawn> get_special_spawns(const Char& user) const override;
-        uint16_t get_damage_delay() const override;
-        bool suppresses_bullet() const override;
+        AreaEffect get_area_effect(const Char& user) const override;
+
+        CastKind get_cast_kind() const override;
+        uint16_t get_prepare_time() const override;
+        uint16_t get_ball_delay() const override;
+        nl::node get_prepare_effect() const override;
+        nl::node get_keydown_effect() const override;
+        nl::node get_keydown_end_effect() const override;
+        nl::node get_finish_effect() const override;
+        int32_t get_cooldown(int32_t level) const override;
 
         bool is_attack() const override;
         bool is_skill() const override;
@@ -52,16 +57,12 @@ namespace jrc
             const Job& job, uint16_t hp, uint16_t mp, uint16_t bullets) const override;
 
     private:
-        std::unique_ptr<SkillAction> action;
-        std::unique_ptr<SkillBullet> bullet;
+        // Whether the skill has a projectile of its own. A skill without one
+        // throws whatever the weapon is loaded with.
+        bool has_projectile(const Char& user) const;
+
         std::unique_ptr<SkillSound> sound;
-        std::unique_ptr<SkillUseEffect> useeffect;
-        std::unique_ptr<SkillHitEffect> hiteffect;
-        std::unique_ptr<SkillSpecialEffect> special;
 
         int32_t skillid;
-        bool overregular;
-        bool projectile;
-        bool suppressbullet;
     };
 }

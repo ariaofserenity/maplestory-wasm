@@ -59,6 +59,8 @@ namespace jrc
         connected = false;
         length    = 0;
         pos       = 0;
+        handling  = false;
+        reconnected = false;
     }
 
     Session::~Session()
@@ -128,6 +130,15 @@ namespace jrc
         {
             connected = false;
         }
+
+        // This is called from inside a packet handler, so process() is part way
+        // through the old connection's buffer with the old connection's keys.
+        // Those keys have just been replaced, so any half-assembled packet and
+        // any bytes still queued behind it belong to a stream that no longer
+        // exists and must not be carried into the new one.
+        pos = 0;
+        length = 0;
+        reconnected = true;
     }
 
     void Session::process(const int8_t* bytes, size_t available)
@@ -168,6 +179,15 @@ namespace jrc
                 Console::get().print(err.what());
             }
 
+            // A handler may have switched us to another server, in which case
+            // everything still sitting in this buffer belongs to the connection
+            // we just dropped. Stop rather than decrypt it with the new keys.
+            if (reconnected)
+            {
+                reconnected = false;
+                return;
+            }
+
             pos    = 0;
             length = 0;
 
@@ -199,6 +219,19 @@ namespace jrc
 
     void Session::read()
     {
+        // Handlers run inside process() and may touch game files that have not
+        // been downloaded yet. Fetching one suspends this call stack and hands
+        // control back to the main loop, which calls read() again. The socket
+        // hands out a pointer to a single buffer that receive() overwrites, so
+        // going round again here would pull the ground out from under the
+        // suspended handler and leave the packet stream misaligned - which
+        // surfaces as a run of nonsense opcodes. The data is not lost; it stays
+        // queued and is picked up on the next tick.
+        if (handling)
+        {
+            return;
+        }
+
         // Check if a packet has arrived. Handle if data is sufficient:
         //     4 bytes(header) + 2 bytes(opcode) = 6.
         size_t result = socket.receive(&connected);
@@ -207,7 +240,18 @@ namespace jrc
         {
             // Retrieve buffer from the socket and process it.
             const int8_t* bytes = socket.get_buffer();
-            process(bytes, result);
+
+            handling = true;
+            try
+            {
+                process(bytes, result);
+            }
+            catch (...)
+            {
+                handling = false;
+                throw;
+            }
+            handling = false;
         }
     }
 

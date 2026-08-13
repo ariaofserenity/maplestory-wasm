@@ -25,7 +25,7 @@ MapleStory WASM brings the classic MapleStory v83 client to modern web browsers 
                                           ┌────────────────┐  ┌───────────────────────────┐
                                           │ WS Proxy       │  │   Assets Server (Python)  │
                                           │ web/ws_proxy.py│  │   ws://localhost:8765     │
-                                          │ :8080          │  └───────────────────────────┘
+                                          │ :8181          │  └───────────────────────────┘
                                           └───────┬────────┘
                                                   │ TCP
                                                   ▼
@@ -118,7 +118,7 @@ pip install -r web/requirements.txt
 
 ```bash
 python3 web/server.py
-python3 web/ws_proxy.py --ws-port 8080
+python3 web/ws_proxy.py --ws-port 8181
 python3 web/assets_server.py --port 8765 --directory .
 ```
 
@@ -186,7 +186,7 @@ The `web/config.json` file controls how the browser connects to backend services
 | `AssetsServerIP`       | IP/Hostname of the LazyFS Assets Server. |
 | `AssetsServerPort`     | Port of the LazyFS Assets Server (defaults to `8765`). |
 | `ProxyIP`              | IP/Hostname of the WebSocket Proxy for game traffic. |
-| `ProxyPort`            | Port of the WebSocket Proxy (defaults to `8080`). |
+| `ProxyPort`            | Port of the WebSocket Proxy (defaults to `8181`). |
 | `MapleStoryServerIp`   | IP address of the target Cosmic Server (forwarded by proxy). |
 | `MapleStoryServerPort` | Port of the target Cosmic Server (defaults to `8484`). |
 

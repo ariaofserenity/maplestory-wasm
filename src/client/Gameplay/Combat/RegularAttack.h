@@ -18,11 +18,9 @@
 #pragma once
 #include "SpecialMove.h"
 
-#include "SkillAction.h"
-#include "SkillBullet.h"
-
 namespace jrc
 {
+    // Swinging the equipped weapon, with no skill involved.
     class RegularAttack : public SpecialMove
     {
     public:
@@ -38,9 +36,5 @@ namespace jrc
 
         ForbidReason can_use(int32_t level, Weapon::Type weapon,
             const Job& job, uint16_t hp, uint16_t mp, uint16_t bullets) const override;
-
-    private:
-        RegularAction action;
-        RegularBullet bullet;
     };
 }

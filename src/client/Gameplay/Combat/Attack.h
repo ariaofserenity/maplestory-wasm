@@ -63,7 +63,31 @@ namespace jrc
         Point<int16_t> origin;
         Rectangle<int16_t> range;
         float hrange = 1.0f;
+        // How far forward a ranged or magic attack reaches, in pixels. The
+        // rect only describes the band it sweeps; for anything fired rather
+        // than swung the reference client takes the distance from the level's
+        // scalar range instead, falling back to a per-weapon default. Zero
+        // means the rect alone decides, which is the case for close attacks.
+        int16_t reach = 0;
+        // A fired attack does not sweep the skill's rect at all. The reference
+        // client lays a one-pixel-tall line from the muzzle out to the reach
+        // and asks which monsters cross it, which still catches anything whose
+        // body spans that height. A handful of skills widen the line, and a
+        // handful replace it with the level's own rect; those clear this.
+        bool linear = false;
+        // A fired attack normally searches a wedge spreading out from the
+        // muzzle and hits the single nearest monster inside it. This makes it
+        // sweep the line described above instead.
+        bool rectsearch = false;
+        // Whether, having found that one monster, it spreads to whatever else
+        // stands inside the level's rect around it.
+        bool splash = false;
+        // How far above and below the line a widened one reaches.
+        int16_t vadjust = 0;
         bool toleft  = false;
+
+        // How high above the caster's feet a shot leaves.
+        static constexpr int16_t MUZZLE_HEIGHT = 28;
     };
 
 
@@ -118,7 +142,7 @@ namespace jrc
             : type(attack.type),     hitcount(attack.hitcount),
               skill(attack.skill),   bullet(attack.bullet),
               stance(attack.stance), speed(attack.speed),
-              toleft(attack.toleft)
+              reach(attack.reach), toleft(attack.toleft)
             {}
 
         AttackResult() = default;
@@ -134,6 +158,10 @@ namespace jrc
         uint8_t display  = 0;
         uint8_t stance   = 0;
         uint8_t speed    = 0;
+        // How far the shot flies. Only the caster's own attacks carry it; one
+        // arriving over the wire leaves it zero and the reach is worked out
+        // from the character instead.
+        int16_t reach    = 0;
         bool toleft      = false;
         // Damage lines per target, in the order the targets were selected
         // (nearest first). Ordering is load-bearing: multi-target skills

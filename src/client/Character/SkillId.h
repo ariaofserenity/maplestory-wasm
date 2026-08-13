@@ -160,6 +160,12 @@ namespace jrc
 
             // Ranger
             INFERNO = 3111003,
+            BLIZZARD_SNIPER = 3211003,
+            ARROW_ERUPTION = 3211004,
+            BIG_BANG_FP = 2121001,
+            BIG_BANG_IL = 2221001,
+            BIG_BANG_BISHOP = 2321001,
+            BLIZZARD_ARCHMAGE = 2221007,
             ARROW_RAIN = 3111004,
             STRAFE = 3111006,
 

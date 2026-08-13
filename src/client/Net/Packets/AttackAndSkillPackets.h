@@ -141,4 +141,24 @@ namespace jrc
             // a point (4 bytes) could be added at the end
         }
     };
+
+
+    // Tells the server a charging skill has started, so it can show the
+    // charging animation to everyone else in the map.
+    // Opcode: SKILL_EFFECT(93)
+    class SkillEffectPacket : public OutPacket
+    {
+    public:
+        SkillEffectPacket(int32_t skillid, int32_t level, uint8_t speed)
+            : OutPacket(SKILL_EFFECT) {
+
+            write_int(skillid);
+            write_byte(static_cast<uint8_t>(level));
+            // Direction and inventory flags, neither of which the server reads
+            // for anything but the echo it sends back out.
+            write_byte(0);
+            write_byte(speed);
+            write_byte(0);
+        }
+    };
 }

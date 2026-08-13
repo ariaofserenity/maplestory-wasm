@@ -81,6 +81,8 @@ namespace jrc
         std::vector<std::pair<int32_t, bool>> calculate_damage(const Attack& attack);
         /// Apply damage to the mob.
         void apply_damage(int32_t damage, bool toleft);
+        // Shove the monster away from whatever hit it.
+        void push_back(int16_t distance, bool toleft);
 
         /// Create a touch damage attack to the player.
         MobAttack create_touch_attack() const;

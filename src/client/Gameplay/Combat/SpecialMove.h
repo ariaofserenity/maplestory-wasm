@@ -17,15 +17,246 @@
 //////////////////////////////////////////////////////////////////////////////
 #pragma once
 #include "Attack.h"
-#include "SkillSpecialEffect.h"
 
 #include "../MapleMap/Mob.h"
 
 #include "../../Character/Char.h"
 #include "../../Character/Job.h"
 
+#include "../../Template/Rectangle.h"
+
+#include "nlnx/node.hpp"
+
+#include <vector>
+
 namespace jrc
 {
+    // How far a weapon shoots when the skill itself states no range, and the
+    // skill whose own range is added on top of it. Taken from the reference
+    // client's shoot-range lookup: a bow reaches 300 plus however far The Eye
+    // of Amazon extends it, a claw 200 plus Keen Eyes, a gun a flat 200.
+    struct ShootReach
+    {
+        int16_t base = 0;
+        // Zero when nothing extends this weapon's reach.
+        int32_t bonusskill = 0;
+    };
+
+    inline ShootReach default_shoot_reach(Weapon::Type weapon, bool cygnus)
+    {
+        switch (weapon)
+        {
+        case Weapon::BOW:
+        case Weapon::CROSSBOW:
+            return { 300, cygnus ? 13000001 : 3000002 };
+        case Weapon::CLAW:
+            return { 200, cygnus ? 14000001 : 4000001 };
+        case Weapon::GUN:
+            return { 200, 0 };
+        default:
+            return { 0, 0 };
+        }
+    }
+
+    // How far this character's shots reach when the skill states no range of
+    // its own: the weapon's base distance plus whatever its mastery skill adds.
+    int16_t resolve_shoot_reach(const Char& user);
+
+    // How far above and below the muzzle a fired attack reaches. Zero leaves
+    // the client's one-pixel line, which is what almost every shoot skill uses.
+    inline int16_t shoot_vertical_adjust(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3001004:  // Arrow Blow
+        case 3121003:  // Dragon's Breath
+        case 3221001:  // Piercing Arrow
+        case 3221003:  // Dragon's Breath (Marksman)
+        case 33101001:
+            return 20;
+        case 3201005:  // Iron Arrow
+        case 4121003:  // Taunt
+        case 4221003:  // Taunt (Night Lord)
+        case 13111006:
+            return 10;
+        case 4111005:  // Avenger
+        case 14111002:
+            return 36;
+        case 33121005:
+            return 12;
+        case 11101004:
+        case 15111007:
+        case 21100004:
+        case 21110004:
+            return 60;
+        case 15111006:
+            return 150;
+        default:
+            return 0;
+        }
+    }
+
+    // How quickly the wedge a shot searches widens: one pixel above and below
+    // the muzzle line for every this many pixels of travel.
+    constexpr int16_t SHOOT_WEDGE_SLOPE = 4;
+
+    // Skills that sweep a rect instead of searching the wedge. Everything
+    // else - the plain shot, Arrow Bomb, Inferno, Strafe, Hurricane - looks
+    // for the nearest monster inside a wedge spreading out from the muzzle,
+    // and hits that one.
+    inline bool shoot_searches_rect(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3101003:  // Power Knock-Back
+        case 3111004:  // Arrow Rain
+        case 3121003:  // Dragon's Breath
+        case 3201003:  // Power Knock-Back (Crossbowman)
+        case 3201005:  // Iron Arrow
+        case 3211004:  // Arrow Eruption
+        case 3221001:  // Piercing Arrow
+        case 3221003:  // Dragon's Breath (Marksman)
+        case 4111005:  // Avenger
+        case 4121003:  // Taunt
+        case 4221003:  // Taunt (Night Lord)
+        case 5201001:
+        case 5211004:
+        case 5211005:
+        case 5221008:
+        case 11101004:
+        case 13101005:
+        case 13111000:
+        case 13111006:
+        case 14101006:
+        case 14111002:
+        case 15111007:
+        case 21100004:
+        case 21110004:
+        case 21120006:
+        case 33101001:
+        case 33101002:
+        case 33121001:
+        case 33121005:
+        case 35001001:
+        case 35101009:
+        case 35111015:
+        case 35121012:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Skills that, having found their target in the wedge, spread to whatever
+    // else stands inside the level's rect around it.
+    inline bool shoot_splashes(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3001004:  // Arrow Blow
+        case 3101005:  // Arrow Bomb
+        case 3111003:  // Inferno
+        case 3211003:  // Blizzard (Sniper)
+        case 33101007:
+        case 35111004:
+        case 35121005:
+        case 35121013:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Skills that pick their targets out of the level's own rect instead of
+    // the line the muzzle draws.
+    inline bool shoot_area_from_data(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3101003:  // Power Knock-Back
+        case 3111004:  // Arrow Rain
+        case 3201003:  // Power Knock-Back (Crossbowman)
+        case 3211004:  // Arrow Eruption
+        case 5201001:
+        case 5211004:
+        case 5211005:
+        case 5221008:
+        case 13101005:
+        case 13111000:
+        case 14101006:
+        case 21120006:
+        case 33101002:
+        case 33121001:
+        case 35001001:
+        case 35111015:
+        case 35121012:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Skills that draw no projectile of their own, however the shot is armed.
+    inline bool shoot_hides_bullet(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3101003:  // Power Knock-Back
+        case 3111004:  // Arrow Rain
+        case 3201003:  // Power Knock-Back (Crossbowman)
+        case 3211004:  // Arrow Eruption
+        case 5201001:
+        case 5211004:
+        case 5211005:
+        case 13101005:
+        case 13111000:
+        case 14101006:
+        case 21120006:
+        case 33101002:
+        case 33121001:
+        case 35001001:
+        case 35101009:
+        case 35121012:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // How long the client leaves between the shots of one volley. Zero looses
+    // them together, which is what all but a handful of skills do.
+    inline uint16_t shoot_bullet_delay(int32_t skillid, int32_t bulletid)
+    {
+        // A thrown star is paced by what is being thrown rather than by the
+        // skill throwing it.
+        if (bulletid / 10000 == 207 || bulletid / 1000 == 5021
+            || skillid == 4111004 || skillid == 5221007)
+        {
+            return 120;
+        }
+
+        switch (skillid)
+        {
+        // Double Shot is v83-only; GMSv95 knows the id but gives it no gap of
+        // its own, so this is the one value in the table applied by analogy.
+        case 3001005:  // Double Shot
+        case 3111006:  // Strafe
+        case 3211006:  // Strafe (Sniper)
+        case 13111001:
+        case 33001000:
+        case 33111001:
+            return 60;
+        case 35001004:
+        case 35101010:
+            return 90;
+        case 5001003:
+        case 5210000:
+            return 240;
+        default:
+            return 0;
+        }
+    }
+
     // Base class for attacks and buffs.
     class SpecialMove
     {
@@ -41,6 +272,88 @@ namespace jrc
             FBR_OTHER
         };
 
+        // How a move is cast. A plain move goes off the moment it is used; the
+        // other two run through extra stages first, which is what the prepare
+        // and keydown animations exist for.
+        enum CastKind
+        {
+            // Used and resolved on the same frame.
+            CAST_INSTANT,
+            // Plays a wind-up before resolving.
+            CAST_PREPARE,
+            // Charges for as long as its key is held.
+            CAST_KEYDOWN
+        };
+
+        // What a move paints over the ground it affects: an animation shown
+        // where it landed, and a tile left on the terrain. The animation may be
+        // a single one played in place, or a stream of copies emitted across
+        // the area - Arrow Rain's falling arrows and Arrow Eruption's rising
+        // ones are both the latter.
+        // How a move paints the area it affects. The reference client hands
+        // "special" to one of three registrars on CAnimationDisplayer, each
+        // with its own geometry, and picks the anchor by skill id - so a single
+        // "show the special animation" does not reproduce any of them.
+        enum EmitterKind
+        {
+            // No area animation.
+            EMIT_NONE,
+            // A single animation played once where the move landed.
+            EMIT_ONCE,
+            // Copies scattered through the box, each travelling and repeating.
+            EMIT_FALLING,
+            // Copies bursting outward from the box's centre, each played once.
+            EMIT_EXPLOSION
+        };
+
+        // Where the box the copies fill is placed.
+        enum AnchorKind
+        {
+            // On the caster.
+            ANCHOR_CASTER,
+            // Where the shot first connected.
+            ANCHOR_IMPACT,
+            // One emitter per struck monster, on that monster.
+            ANCHOR_PER_MOB
+        };
+
+        struct AreaEffect
+        {
+            EmitterKind kind = EMIT_NONE;
+            AnchorKind anchor = ANCHOR_CASTER;
+
+            // Shown once for EMIT_ONCE.
+            nl::node special;
+            // The animations a copy may use; one is picked at random per copy.
+            std::vector<nl::node> variants;
+
+            // Copies emitted per tick, the gap between ticks, when the first
+            // tick happens and when emitting stops - all in ms. The emitter
+            // runs for duration, so it produces count copies every interval
+            // until then, not count copies in total.
+            int16_t count = 0;
+            int16_t interval = 0;
+            int16_t start = 0;
+            int16_t duration = 0;
+            // EMIT_FALLING only: how far a copy travels, and how long it takes.
+            // "fall" is a time, not a distance.
+            int16_t travelx = 0;
+            int16_t travely = 0;
+            int16_t falltime = 0;
+            // Opacity a copy is drawn at; zero means pick one per copy.
+            int16_t alpha = 0;
+
+            // The box copies spawn inside, relative to the anchor, and the
+            // amount the caller shifts it up by.
+            Rectangle<int16_t> spawnbox;
+            int16_t lifttop = 0;
+            int16_t liftbottom = 0;
+
+            // Left on the terrain for lifetime ms.
+            nl::node tile;
+            uint16_t lifetime = 0;
+        };
+
         virtual ~SpecialMove() {}
 
         virtual void apply_useeffects(Char& user) const = 0;
@@ -49,22 +362,49 @@ namespace jrc
         virtual void apply_hiteffects(const AttackUser& user, Mob& target) const = 0;
         virtual Animation get_bullet(const Char& user, int32_t bulletid) const = 0;
 
-        // Animations shown over the area a move affects. Most moves have none.
-        virtual std::vector<SpecialSpawn> get_special_spawns(const Char&) const
+        virtual AreaEffect get_area_effect(const Char&) const
         {
             return {};
         }
-        // Extra delay before this move's damage registers, for moves whose
-        // effect lands some time after the cast.
-        virtual uint16_t get_damage_delay() const
+
+        virtual CastKind get_cast_kind() const
+        {
+            return CAST_INSTANT;
+        }
+        // How long the wind-up runs, in ms. Only meaningful for CAST_PREPARE.
+        virtual uint16_t get_prepare_time() const
         {
             return 0;
         }
-        // Whether the move replaces the equipped projectile with its own
-        // area animation instead of throwing it.
-        virtual bool suppresses_bullet() const
+        // Delay between the cast and the projectile leaving the caster, in ms.
+        virtual uint16_t get_ball_delay() const
         {
-            return false;
+            return 0;
+        }
+        // The wind-up animation, for a move that has one.
+        virtual nl::node get_prepare_effect() const
+        {
+            return {};
+        }
+        // The animation shown while a keydown move is charging, and the one that
+        // closes it out.
+        virtual nl::node get_keydown_effect() const
+        {
+            return {};
+        }
+        virtual nl::node get_keydown_end_effect() const
+        {
+            return {};
+        }
+        // Shown on the caster once the move is over.
+        virtual nl::node get_finish_effect() const
+        {
+            return {};
+        }
+        // Cooldown in ms, or zero when the move has none.
+        virtual int32_t get_cooldown(int32_t) const
+        {
+            return 0;
         }
 
         virtual bool is_attack() const = 0;

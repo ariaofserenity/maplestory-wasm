@@ -30,12 +30,20 @@ namespace jrc
         Bullet(Animation animation, Point<int16_t> origin, bool toleft);
 
         void draw(double viewx, double viewy, float alpha) const;
-        bool settarget(Point<int16_t> target);
+        // Aim the shot. flighttime is how long it should take to arrive, in ms;
+        // zero leaves it at the speed band a projectile flies at by default.
+        // Returns true if it is already on top of its target, in which case it
+        // should not be spawned at all.
+        bool settarget(Point<int16_t> target, uint16_t flighttime = 0);
         bool update(Point<int16_t> target);
 
     private:
+        // Point the sprite along the line it is flying.
+        void set_pitch(double xdelta, double ydelta);
+
         Animation animation;
         MovingObject moveobj;
-        bool flip;
+        bool flip = false;
+        float pitch = 0.0f;
     };
 }
