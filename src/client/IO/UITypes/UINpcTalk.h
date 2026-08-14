@@ -20,6 +20,8 @@
 
 #include "../../Graphics/Text.h"
 #include "../../Graphics/Texture.h"
+#include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -49,6 +51,45 @@ namespace jrc
             const std::string& text
         );
 
+        // Which buttons a locally driven page offers.
+        enum class LocalPrompt
+        {
+            // Advance through a page of text.
+            TEXT,
+            // Ask the player to accept or decline.
+            YES_NO
+        };
+
+        // What a locally driven page does when the player presses a button.
+        // Any of these may be left empty, in which case the corresponding
+        // button simply closes the window.
+        struct LocalCallbacks
+        {
+            std::function<void()> advance;
+            // Called with the index of the option the player picked, for a
+            // page whose text carries #L..#l options.
+            std::function<void(int32_t)> select;
+            std::function<void()> accept;
+            std::function<void()> decline;
+            std::function<void()> dismiss;
+        };
+
+        // Show a page the client itself is driving rather than the server.
+        //
+        // Quest conversations are stored in the game files, so for those the
+        // reference client plays the dialogue locally and only reports the
+        // outcome. Such a page must not answer the server, which is what
+        // separates this from change_text: nothing is sent, and the callbacks
+        // decide what happens next. A page that is not the last one shows a
+        // Next button; the last one shows OK or the accept/decline pair.
+        void show_local(
+            int32_t npcid,
+            const std::string& text,
+            LocalPrompt prompt,
+            bool has_next,
+            LocalCallbacks callbacks
+        );
+
     protected:
         Button::State button_pressed(uint16_t buttonid) override;
 
@@ -61,6 +102,23 @@ namespace jrc
             SELECTION,
             UNKNOWN
         };
+
+        // Lay the window out around one page of text. Shared by the server
+        // driven and the locally driven paths, which differ only in where the
+        // page came from and what the buttons do.
+        void apply_dialogue(
+            int32_t npcid,
+            int8_t speaker,
+            const std::string& text,
+            DialogueMode mode,
+            bool has_prev,
+            bool has_next
+        );
+
+        // Run one of the local callbacks. Closes the window unless the
+        // callback put a new page up, which is how a multi-page conversation
+        // keeps the same window open.
+        void run_local(const std::function<void()>& callback);
 
         void parse_selections(const std::string& text, std::string& rendered_text);
         static std::string strip_npc_tokens(const std::string& text);
@@ -98,6 +156,12 @@ namespace jrc
 
         int8_t type;
         bool end_confirms_dialogue;
+        // Set while the window is showing a page the client drives itself.
+        bool local;
+        LocalCallbacks local_callbacks;
+        // Counts the pages put up locally, so a callback that shows the next
+        // page can be told apart from one that ends the conversation.
+        uint64_t local_epoch;
         std::string prompttext;
         std::vector<std::string> selection_texts;
         std::vector<Text> selection_labels;

@@ -308,6 +308,29 @@ namespace jrc
         return 0;
     }
 
+    int32_t Inventory::get_total_item_count(int32_t itemid) const
+    {
+        // An item can sit in several stacks, and equips of the same id occupy a
+        // slot each, so every slot of the owning tab has to be counted rather
+        // than the first match taken. Equipped gear is deliberately left out:
+        // the server refuses a quest hand-in for an item the player is wearing.
+        InventoryType::Id type = InventoryType::by_item_id(itemid);
+        if (type == InventoryType::NONE)
+        {
+            return 0;
+        }
+
+        int32_t total = 0;
+        for (auto& iter : inventories[type])
+        {
+            if (iter.second.item_id == itemid)
+            {
+                total += iter.second.count;
+            }
+        }
+        return total;
+    }
+
     int16_t Inventory::get_item_count(InventoryType::Id type, int16_t slot) const
     {
         auto iter = inventories[type].find(slot);

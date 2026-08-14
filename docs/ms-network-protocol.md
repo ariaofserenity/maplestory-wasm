@@ -4240,3 +4240,53 @@ Stored as 4 × int32 (128 bits):
 ---
 
 *End of Cosmic MapleStory Server Network Protocol Reference*
+
+---
+
+## Quest client behaviour (reverse-engineered from GMSv95.exe + PDB)
+
+The server sends nothing when a quest npc is clicked, so the following is
+decided by the client. All of it was read out of the reference client rather
+than inferred from behaviour.
+
+### NPC quest balloon
+
+`CNpc::SetQuestList` (0x671980) sorts the npc's quests into five arrays and
+`CNpc::ShowQuestList` picks one balloon from `UI/UIWindow2.img/QuestIcon/<n>`.
+The bucket each quest lands in, and the precedence between buckets, is:
+
+| Bucket   | Filled with                                   | Icon |
+|----------|-----------------------------------------------|------|
+| `+0xd4`  | started, `CheckCompleteDemand` passes          | 2    |
+| `+0xcc`  | `CheckStartDemand` passes                      | 0    |
+| `+0xd0`  | started, complete demand not met               | 1    |
+| `+0xd8`  | startable but `IsWorthlessQuest`               | 3    |
+| none     |                                                | 6 (hidden) |
+
+Precedence is 0xd4 > 0xcc > 0xd0 > 0xd8, taken from the branch chain at
+0x671c26. The balloon is drawn over the npc via `CAnimationDisplayer::LoadLayer`
+anchored at `CAvatar::GetHeight()`.
+
+### Summary markup
+
+`demandSummary` / `rewardSummary` are markup, not text. The token set below is
+what actually occurs across all of `Quest.nx`:
+
+```
+#i<id>:#  #v<id>:#   item icon
+#t<id>:#  #t<id>#    item name
+#c<id>#              count of that item the character holds
+#o<id>#              mob name
+#a<n>#               kill progress; n = questid * 10 + (mob index + 1)
+#p<id>#  #m<id>#     npc name, map name
+#W<name>#            heading picture from Quest/quest_info/summary_icon
+#f<path>#            picture named by full wz path
+#b #r #d #k #e #n    colour / weight
+```
+
+The `#a` encoding was checked against every one of its 121 uses in the quest
+files and matches exactly, with no exceptions.
+
+### Notification wording
+
+StringPool 786 is `New Quest!` and 787 is `Quest Complete!`.

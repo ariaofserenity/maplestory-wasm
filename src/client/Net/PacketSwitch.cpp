@@ -26,6 +26,7 @@
 #include "Handlers/InventoryHandlers.h"
 #include "Handlers/MessagingHandlers.h"
 #include "Handlers/NpcInteractionHandlers.h"
+#include "Handlers/QuestHandlers.h"
 
 #include "../Console.h"
 
@@ -47,6 +48,9 @@ namespace jrc
 
         // Player 1
         APPLY_BUFF = 20,
+
+        // Quest 1
+        QUEST_CLEAR = 49,
 
         // Login 2
         SELECT_WORLD       = 26,
@@ -151,6 +155,9 @@ namespace jrc
         OPEN_NPC_SHOP = 305,
         STORAGE       = 309,
 
+        // Quest 2
+        UPDATE_QUEST_INFO = 211,
+
         KEYMAP      = 335,
         AUTO_HP_POT = 336,
         AUTO_MP_POT = 337
@@ -226,6 +233,10 @@ namespace jrc
         emplace<MODIFY_INVENTORY, ModifyInventoryHandler>();
         emplace<GATHER_RESULT, GatherResultHandler>();
         emplace<SORT_RESULT, SortResultHandler>();
+
+        // Quest handlers
+        emplace<QUEST_CLEAR, QuestClearHandler>();
+        emplace<UPDATE_QUEST_INFO, UpdateQuestInfoHandler>();
 
         // Npc Interaction Handlers
         emplace<NPC_DIALOGUE, NpcDialogueHandler>();

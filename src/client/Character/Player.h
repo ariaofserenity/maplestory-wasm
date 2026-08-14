@@ -159,6 +159,8 @@ namespace jrc
         Skillbook& get_skills();
         /// Obtain a reference to the player's questlog.
         Questlog& get_quests();
+        /// Obtain a reference to the player's questlog.
+        const Questlog& get_quests() const;
         /// Obtain a reference to the player's telerock locations.
         Telerock& get_telerock();
         /// Obtain a reference to the player's monsterbook.

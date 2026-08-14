@@ -17,32 +17,165 @@
 //////////////////////////////////////////////////////////////////////////////
 #include "QuestLog.h"
 
+#include "../Data/QuestData.h"
+
 namespace jrc
 {
-    void Questlog::add_started(int16_t qid, const std::string& qdata)
+    namespace
     {
-        started[qid] = qdata;
+        // One mob counter is three digits wide in the progress string.
+        constexpr size_t PROGRESS_DIGITS = 3;
+
+        // The quest a given quest keeps its progress counter in, or zero when
+        // it keeps its own. Either stage may name it.
+        int16_t info_number_of(int16_t questid)
+        {
+            const QuestData& quest = QuestData::get(questid);
+            if (int16_t infonumber = quest.get_requirements(QuestData::START).infonumber)
+            {
+                return infonumber;
+            }
+            return quest.get_requirements(QuestData::END).infonumber;
+        }
     }
 
-    void Questlog::add_in_progress(int16_t qid, int16_t qidl, const std::string& qdata)
+    void Questlog::apply_started(int16_t questid, const std::string& progress)
     {
-        in_progress[qid] = make_pair(qidl, qdata);
+        if (lastapplied != 0 && info_number_of(lastapplied) == questid)
+        {
+            infos[questid] = progress;
+            // A counter record cannot own the record after it in turn, so the
+            // next one starts a fresh pair.
+            lastapplied = 0;
+            return;
+        }
+
+        Record& record = records[questid];
+        record.state = STARTED;
+        record.progress = progress;
+        record.completiontime = 0;
+        lastapplied = questid;
     }
 
-    void Questlog::add_completed(int16_t qid, int64_t time)
+    void Questlog::add_completed(int16_t questid, int64_t completiontime)
     {
-        completed[qid] = time;
+        Record& record = records[questid];
+        record.state = COMPLETED;
+        record.progress.clear();
+        record.completiontime = completiontime;
+        // A completion is sent on its own, never with a counter record behind it.
+        lastapplied = 0;
     }
 
-    bool Questlog::is_started(int16_t qid)
+    void Questlog::forfeit(int16_t questid)
     {
-        return started.count(qid) > 0;
+        records.erase(questid);
+        // A quest being reset is still followed by its counter record, which
+        // the server deliberately leaves standing.
+        lastapplied = questid;
     }
 
-    int16_t Questlog::get_last_started()
+    void Questlog::reset_update_sequence()
     {
-        auto qend = started.end();
-        qend--;
-        return qend->first;
+        lastapplied = 0;
+    }
+
+    const Questlog::Record* Questlog::find(int16_t questid) const
+    {
+        auto iter = records.find(questid);
+        return iter == records.end() ? nullptr : &iter->second;
+    }
+
+    Questlog::State Questlog::get_state(int16_t questid) const
+    {
+        const Record* record = find(questid);
+        return record ? record->state : NOT_STARTED;
+    }
+
+    bool Questlog::is_started(int16_t questid) const
+    {
+        return get_state(questid) == STARTED;
+    }
+
+    bool Questlog::is_completed(int16_t questid) const
+    {
+        return get_state(questid) == COMPLETED;
+    }
+
+    const std::string& Questlog::get_progress(int16_t questid) const
+    {
+        static const std::string noprogress;
+
+        if (const Record* record = find(questid))
+        {
+            if (!record->progress.empty())
+            {
+                return record->progress;
+            }
+        }
+
+        // A quest that keeps its counter in another record has nothing in its
+        // own, so fall back to the record it named.
+        auto iter = infos.find(questid);
+        return iter == infos.end() ? noprogress : iter->second;
+    }
+
+    int32_t Questlog::get_mob_progress(int16_t questid, size_t mobindex) const
+    {
+        const std::string& progress = get_progress(questid);
+
+        size_t start = mobindex * PROGRESS_DIGITS;
+        if (start + PROGRESS_DIGITS > progress.size())
+        {
+            return 0;
+        }
+
+        int32_t count = 0;
+        for (size_t i = start; i < start + PROGRESS_DIGITS; ++i)
+        {
+            char digit = progress[i];
+            if (digit < '0' || digit > '9')
+            {
+                // The counters are fixed-width decimals. Anything else means
+                // this quest tracks something other than kills in its progress
+                // string, and reading on would invent a number.
+                return 0;
+            }
+            count = count * 10 + (digit - '0');
+        }
+
+        return count;
+    }
+
+    int64_t Questlog::get_completion_time(int16_t questid) const
+    {
+        const Record* record = find(questid);
+        return record ? record->completiontime : 0;
+    }
+
+    std::vector<int16_t> Questlog::get_started() const
+    {
+        std::vector<int16_t> started;
+        for (const auto& entry : records)
+        {
+            if (entry.second.state == STARTED)
+            {
+                started.push_back(entry.first);
+            }
+        }
+        return started;
+    }
+
+    std::vector<int16_t> Questlog::get_completed() const
+    {
+        std::vector<int16_t> completed;
+        for (const auto& entry : records)
+        {
+            if (entry.second.state == COMPLETED)
+            {
+                completed.push_back(entry.first);
+            }
+        }
+        return completed;
     }
 }

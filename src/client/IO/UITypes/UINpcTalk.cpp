@@ -295,6 +295,8 @@ namespace jrc
           slider(false),
           type(0),
           end_confirms_dialogue(false),
+          local(false),
+          local_epoch(0),
           selected(0),
           hovered_selection(-1),
           scroll_offset(0),
@@ -425,8 +427,62 @@ namespace jrc
         return false;
     }
 
+    void UINpcTalk::run_local(const std::function<void()>& callback)
+    {
+        if (!callback)
+        {
+            active = false;
+            return;
+        }
+
+        uint64_t before = local_epoch;
+        callback();
+
+        // A callback that showed another page has already reactivated the
+        // window; one that did not has ended the conversation.
+        if (local_epoch == before)
+        {
+            active = false;
+        }
+    }
+
     Button::State UINpcTalk::button_pressed(uint16_t buttonid)
     {
+        if (local)
+        {
+            switch (buttonid)
+            {
+            case OK:
+                // A page with options answers with the option; one without
+                // simply moves on.
+                if (dialogue_mode == DialogueMode::SELECTION && local_callbacks.select)
+                {
+                    int32_t choice = selections.empty() ? 0 : selections[selected];
+                    run_local([this, choice]() { local_callbacks.select(choice); });
+                    break;
+                }
+                run_local(local_callbacks.advance);
+                break;
+            case NEXT:
+                run_local(local_callbacks.advance);
+                break;
+            case YES:
+                run_local(local_callbacks.accept);
+                break;
+            case NO:
+                run_local(local_callbacks.decline);
+                break;
+            case END:
+                run_local(local_callbacks.dismiss);
+                break;
+            }
+
+            // The callback may have put the next page up and reused the same
+            // button, so leaving it pressed would carry a stale highlight over
+            // to a page the player has not clicked on yet.
+            return Button::NORMAL;
+        }
+
         switch (buttonid)
         {
         case OK:
@@ -511,8 +567,68 @@ namespace jrc
         const std::string& tx
     )
     {
+        local = false;
+        local_callbacks = {};
+        type = msgtype;
+
+        // Text-only npc dialogue carries the Prev/Next flags in two trailing
+        // bytes. When no flags are present the dialog expects a plain OK.
+        bool has_prev = has_navigation_flags && (style & 0x00FF) != 0;
+        bool has_next = has_navigation_flags && (style & 0xFF00) != 0;
+
+        apply_dialogue(
+            npcid,
+            speakerbyte,
+            tx,
+            resolve_dialogue_mode(msgtype, has_navigation_flags),
+            has_prev,
+            has_next
+        );
+    }
+
+    void UINpcTalk::show_local(
+        int32_t npcid,
+        const std::string& tx,
+        LocalPrompt prompt,
+        bool has_next,
+        LocalCallbacks callbacks
+    )
+    {
+        local = true;
+        local_callbacks = std::move(callbacks);
+        local_epoch++;
+
+        DialogueMode mode = DialogueMode::TEXT;
+        if (prompt == LocalPrompt::YES_NO)
+        {
+            mode = DialogueMode::YES_NO;
+        }
+        else if (find_next_selection_tag(tx, 0) != std::string::npos)
+        {
+            // Quest pages use the same #L..#l links npc scripts do. They only
+            // read as "click here to go on", but they still have to be drawn
+            // and clicked as options rather than left in the text.
+            mode = DialogueMode::SELECTION;
+        }
+
+        // A locally driven page always speaks as the npc it was opened at.
+        // Quest dialogue only ever moves forward, so no Prev button is offered
+        // and the last page falls back to OK.
+        apply_dialogue(npcid, 0, tx, mode, false, has_next);
+        active = true;
+    }
+
+    void UINpcTalk::apply_dialogue(
+        int32_t npcid,
+        int8_t speakerbyte,
+        const std::string& tx,
+        DialogueMode mode,
+        bool has_prev,
+        bool has_next
+    )
+    {
         std::string processed_tx = replace_macros(tx);
-        dialogue_mode = resolve_dialogue_mode(msgtype, has_navigation_flags);
+        dialogue_mode = mode;
 
         selections.clear();
         selection_texts.clear();
@@ -604,12 +720,6 @@ namespace jrc
         switch (dialogue_mode)
         {
         case DialogueMode::TEXT:
-        {
-            // Text-only NPC dialogue carries the Prev/Next flags in two trailing
-            // bytes. When no flags are present the dialog expects a plain OK button.
-            bool has_prev = has_navigation_flags && (style & 0x00FF) != 0;
-            bool has_next = has_navigation_flags && (style & 0xFF00) != 0;
-
             if (has_next)
                 place_button_from_right(NEXT);
             if (has_prev)
@@ -619,7 +729,6 @@ namespace jrc
                 place_button_from_right(OK);
             }
             break;
-        }
         case DialogueMode::YES_NO:
         case DialogueMode::ACCEPT_DECLINE:
             place_button_from_right(NO);
@@ -627,8 +736,21 @@ namespace jrc
             break;
         case DialogueMode::SELECTION:
             place_button_from_right(OK);
-            place_button_from_right(NEXT);
-            place_button_from_right(PREV);
+            // Server-driven menus let the arrows walk the options. A locally
+            // driven page uses them to walk the conversation instead, so they
+            // are placed by the page rather than by the option list.
+            if (local)
+            {
+                if (has_next)
+                    place_button_from_right(NEXT);
+                if (has_prev)
+                    place_button_from_right(PREV);
+            }
+            else
+            {
+                place_button_from_right(NEXT);
+                place_button_from_right(PREV);
+            }
             break;
         case DialogueMode::UNKNOWN:
             // Older scripts and some server variants use dialogue types that this
@@ -643,7 +765,10 @@ namespace jrc
 
         // If text-only dialogue effectively has no visible action button besides
         // END, treat END as confirm to avoid trapping the player in mode=0 exits.
-        if (dialogue_mode == DialogueMode::TEXT &&
+        // A locally driven page never needs this: its END button already runs a
+        // callback rather than answering the server.
+        if (!local &&
+            dialogue_mode == DialogueMode::TEXT &&
             !has_visible_action_button(OK) &&
             !has_visible_action_button(NEXT) &&
             !has_visible_action_button(PREV))
@@ -653,14 +778,13 @@ namespace jrc
 
         // Same fallback for accept/decline prompts when YES/NO buttons fail
         // to render in some WZ/UI variants: END acts as accept so flow advances.
-        if ((dialogue_mode == DialogueMode::YES_NO || dialogue_mode == DialogueMode::ACCEPT_DECLINE) &&
+        if (!local &&
+            (dialogue_mode == DialogueMode::YES_NO || dialogue_mode == DialogueMode::ACCEPT_DECLINE) &&
             !has_visible_action_button(YES) &&
             !has_visible_action_button(NO))
         {
             end_confirms_dialogue = true;
         }
-
-        type = msgtype;
 
         dimension = { top.width(), static_cast<int16_t>(top.height() + height + bottom.height()) };
         position = {
@@ -674,6 +798,12 @@ namespace jrc
     {
         if (!pressed || !escape)
         {
+            return;
+        }
+
+        if (local)
+        {
+            run_local(local_callbacks.dismiss);
             return;
         }
 

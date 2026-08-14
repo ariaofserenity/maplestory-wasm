@@ -30,6 +30,7 @@
 #include "UITypes/UIParty.h"
 #include "UITypes/UIMiniMap.h"
 #include "UITypes/UISkillBook.h"
+#include "UITypes/UIQuestLog.h"
 #include "UITypes/UIKeyConfig.h"
 #include "UITypes/UIWorldMap.h"
 
@@ -217,6 +218,12 @@ namespace jrc
                     emplace<UISkillbook>(
                         Stage::get().get_player().get_stats(),
                         Stage::get().get_player().get_skills()
+                    );
+                    break;
+                case KeyAction::QUESTLOG:
+                    emplace<UIQuestLog>(
+                        Stage::get().get_player().get_stats(),
+                        Stage::get().get_player().get_quests()
                     );
                     break;
                 case KeyAction::KEYCONFIG:

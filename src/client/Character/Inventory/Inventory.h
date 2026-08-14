@@ -100,6 +100,9 @@ namespace jrc
         int16_t find_free_slot(InventoryType::Id type) const;
         // Return the first slot which contains the specified item.
         int16_t find_item(InventoryType::Id type, int32_t itemid) const;
+        // Return how many of an item the character is carrying, across every
+        // slot of the tab the item belongs in.
+        int32_t get_total_item_count(int32_t itemid) const;
         // Return the count of an item. Returns 0 if the slot is empty.
         int16_t get_item_count(InventoryType::Id type, int16_t slot) const;
         // Return the id of an item. Returns 0 if the slot is empty.

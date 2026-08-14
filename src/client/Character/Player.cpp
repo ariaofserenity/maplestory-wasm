@@ -613,6 +613,11 @@ namespace jrc
         return questlog;
     }
 
+    const Questlog& Player::get_quests() const
+    {
+        return questlog;
+    }
+
     Telerock& Player::get_telerock()
     {
         return telerock;

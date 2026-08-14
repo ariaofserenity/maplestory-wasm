@@ -24,13 +24,20 @@
 
 namespace jrc
 {
+    namespace
+    {
+        // How far above the npc's anchor the balloon floats. The balloon art
+        // is 44 pixels tall and is meant to clear the npc's name tag.
+        constexpr Point<int16_t> MARKER_OFFSET = { 0, -72 };
+    }
+
     Npc::Npc(int32_t id,
              int32_t o,
              bool fl,
              uint16_t f,
              bool cnt,
              Point<int16_t> position)
-        : MapObject(o)
+        : MapObject(o), questmarker(MARKER_NONE)
     {
         std::string strid = std::to_string(id);
         strid.insert(0, 7 - strid.size(), '0');
@@ -95,6 +102,27 @@ namespace jrc
             namelabel.draw(absp);
             funclabel.draw(absp + Point<int16_t>(0, 18));
         }
+
+        if (questmarker != MARKER_NONE)
+        {
+            // The balloon floats clear of the npc's own artwork. Its art is
+            // authored with the tail at the bottom, so the anchor is the top
+            // of the npc rather than its feet.
+            markeranimation.draw(DrawArgument(absp + MARKER_OFFSET), alpha);
+        }
+    }
+
+    void Npc::set_quest_marker(QuestMarker marker)
+    {
+        if (questmarker == marker)
+        {
+            return;
+        }
+
+        questmarker = marker;
+        markeranimation = marker == MARKER_NONE
+            ? Animation{}
+            : Animation{ nl::nx::ui["UIWindow2.img"]["QuestIcon"][std::to_string(marker)] };
     }
 
     int8_t Npc::update(const Physics& physics)
@@ -105,6 +133,11 @@ namespace jrc
         }
 
         physics.move_object(phobj);
+
+        if (questmarker != MARKER_NONE)
+        {
+            markeranimation.update();
+        }
 
         if (animations.count(stance))
         {

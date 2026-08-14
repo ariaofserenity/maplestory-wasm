@@ -321,6 +321,8 @@ namespace jrc
         add_sound(Sound::PICKUP,    gamesrc["PickUpItem"]);
         add_sound(Sound::PORTAL,    gamesrc["Portal"]);
         add_sound(Sound::LEVELUP,   gamesrc["LevelUp"]);
+        add_sound(Sound::QUESTCLEAR, gamesrc["QuestClear"]);
+        add_sound(Sound::QUESTALERT, gamesrc["QuestAlert"]);
 
         uint8_t volume = Setting<SFXVolume>::get().load();
 

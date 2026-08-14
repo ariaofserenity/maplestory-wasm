@@ -46,10 +46,42 @@ namespace jrc
         // Changes stance and resets animation.
         void set_stance(const std::string& stance);
 
+        // The marker floating over a quest npc's head.
+        //
+        // The reference client keeps five buckets of quest ids per npc and
+        // picks one balloon from whichever is occupied, in a fixed order of
+        // precedence: a quest ready to be handed in outranks one that can be
+        // started, which outranks one merely under way. The values are the
+        // indices it looks up under UIWindow2/QuestIcon.
+        enum QuestMarker : int32_t
+        {
+            // A quest that can be started right now.
+            MARKER_AVAILABLE = 0,
+            // A quest under way whose conditions are not met yet.
+            MARKER_IN_PROGRESS = 1,
+            // A quest under way that can now be handed in. Takes precedence
+            // over everything else.
+            MARKER_COMPLETE = 2,
+            // A startable quest the client considers beneath the character.
+            MARKER_LOW_VALUE = 3,
+            // Nothing to show.
+            MARKER_NONE = 6
+        };
+
+        // Note which balloon this npc should float, if any.
+        void set_quest_marker(QuestMarker marker);
+
         // Check wether this is a server-sided npc.
         bool isscripted() const;
         // Check if the npc is in range of the cursor.
         bool inrange(Point<int16_t> cursorpos, Point<int16_t> viewpos) const;
+
+        // The npc's id in the game files, as opposed to the object id the
+        // server tracks this particular instance of it by.
+        int32_t get_id() const
+        {
+            return npcid;
+        }
 
         const std::string& get_name() const
         {
@@ -79,5 +111,11 @@ namespace jrc
         Randomizer random;
         Text namelabel;
         Text funclabel;
+
+        // The balloon currently shown, and its animation. Kept apart from the
+        // npc's own animations because it belongs to the ui rather than to the
+        // npc's artwork.
+        QuestMarker questmarker;
+        Animation markeranimation;
     };
 }

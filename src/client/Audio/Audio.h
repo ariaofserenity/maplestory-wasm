@@ -48,6 +48,8 @@ namespace jrc
             PICKUP,
             PORTAL,
             LEVELUP,
+            QUESTCLEAR,
+            QUESTALERT,
             LENGTH
         };
 

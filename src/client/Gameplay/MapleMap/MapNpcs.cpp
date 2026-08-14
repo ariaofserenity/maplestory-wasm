@@ -19,6 +19,8 @@
 
 #include "Npc.h"
 
+#include "../QuestDialogue.h"
+
 #include "../../Net/Packets/NpcInteractionPackets.h"
 
 namespace jrc
@@ -30,6 +32,8 @@ namespace jrc
 
     void MapNpcs::update(const Physics& physics)
     {
+        bool spawned = !spawns.empty();
+
         for (; !spawns.empty(); spawns.pop())
         {
             const NpcSpawn& spawn = spawns.front();
@@ -49,6 +53,13 @@ namespace jrc
         }
 
         npcs.update(physics);
+
+        // A newly spawned npc has no balloon yet, and which one it should
+        // float depends on quest state the client already holds.
+        if (spawned)
+        {
+            QuestDialogue::refresh_markers();
+        }
     }
 
     void MapNpcs::spawn(NpcSpawn&& spawn)
@@ -78,9 +89,14 @@ namespace jrc
             {
                 if (pressed)
                 {
-                    // TODO: try finding dialogue first
-                    TalkToNPCPacket(npc->get_oid())
-                        .dispatch();
+                    // Quest dialogue is game data rather than server script, so
+                    // an npc with something to offer is answered by the client
+                    // itself. Everything else is the server's conversation.
+                    if (!QuestDialogue::offer(npc->get_id(), npc->get_oid()))
+                    {
+                        TalkToNPCPacket(npc->get_oid())
+                            .dispatch();
+                    }
                     return Cursor::IDLE;
                 }
                 else

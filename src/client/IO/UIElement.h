@@ -71,6 +71,7 @@ namespace jrc
             ITEMINVENTORY,
             EQUIPINVENTORY,
             SKILLBOOK,
+            QUESTLOG,
             KEYCONFIG,
             PARTY,
             MINIMAP,

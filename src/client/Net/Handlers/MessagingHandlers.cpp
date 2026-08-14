@@ -2,11 +2,15 @@
 
 #include "../../Character/Char.h"
 #include "../../Console.h"
+#include "../../Audio/Audio.h"
 #include "../../Data/ItemData.h"
+#include "../../Data/QuestData.h"
+#include "../../Gameplay/QuestDialogue.h"
 #include "../../Gameplay/Stage.h"
 #include "../../IO/UI.h"
 #include "../../IO/Messages.h"
 #include "../../IO/UITypes/UIParty.h"
+#include "../../IO/UITypes/UIQuestLog.h"
 #include "../../IO/UITypes/UIStatusMessenger.h"
 #include "../../IO/UITypes/UIStatusBar.h"
 #include "../../IO/UITypes/UIUserInfo.h"
@@ -455,6 +459,59 @@ namespace jrc
                 std::string sign = (gain < 0) ? "-" : "+";
 
                 show_status(Text::WHITE, "Received mesos (" + sign + std::to_string(gain) + ")");
+            }
+        }
+        else if (mode == 1)
+        {
+            // A quest record changed. This is the only place a quest's state
+            // moves after the character enters the field, so the questlog and
+            // anything showing it are updated from here.
+            int16_t questid = recv.read_short();
+            int8_t state = recv.read_byte();
+
+            Questlog& quests = Stage::get().get_player().get_quests();
+            // Noted before the record is replaced, so a quest that was just
+            // taken can be told apart from one that merely advanced.
+            Questlog::State previous = quests.get_state(questid);
+
+            switch (state)
+            {
+            case Questlog::NOT_STARTED:
+                // Sent when a quest is given up, which puts it back to being
+                // available rather than leaving a record behind.
+                quests.forfeit(questid);
+                break;
+            case Questlog::STARTED:
+                // A quest that keeps its counter in another quest's record is
+                // announced as two of these back to back, the second carrying
+                // the other quest's id and marked exactly the same way, so the
+                // questlog is left to sort them out.
+                quests.apply_started(questid, recv.read_string());
+                break;
+            case Questlog::COMPLETED:
+                quests.add_completed(questid, recv.read_long());
+                break;
+            default:
+                break;
+            }
+
+            if (auto questlog = UI::get().get_element<UIQuestLog>())
+            {
+                questlog->update_quests();
+            }
+
+            // Which balloon each npc floats follows from these records, so it
+            // has to be recomputed whenever one of them moves.
+            QuestDialogue::refresh_markers();
+
+            if (state == Questlog::STARTED && previous == Questlog::NOT_STARTED)
+            {
+                const QuestData& quest = QuestData::get(questid);
+                if (quest.is_valid() && !quest.get_name().empty())
+                {
+                    Sound(Sound::QUESTALERT).play();
+                    show_status(Text::YELLOW, "New Quest! - " + quest.get_name());
+                }
             }
         }
         else if (mode == 3)
