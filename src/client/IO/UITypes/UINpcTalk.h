@@ -18,6 +18,8 @@
 #pragma once
 #include "../UIElement.h"
 
+#include "../Components/QuestSummary.h"
+
 #include "../../Graphics/Text.h"
 #include "../../Graphics/Texture.h"
 #include <cstdint>
@@ -130,6 +132,8 @@ namespace jrc
         int16_t get_dialogue_text_y() const;
         int16_t get_options_start_y() const;
         int32_t get_option_at(Point<int16_t> relative) const;
+        // Height of the page body, whichever of the two renderers drew it.
+        int16_t get_body_height() const;
 
         enum Buttons
         {
@@ -147,6 +151,10 @@ namespace jrc
         Texture nametag;
 
         Text text;
+        // Used in place of the plain text when the page names pictures, which
+        // quest dialogue does whenever it talks about an item.
+        QuestSummary richtext;
+        bool use_richtext;
         Texture speaker;
         Text name;
         int16_t height;

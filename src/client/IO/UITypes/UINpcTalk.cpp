@@ -19,6 +19,8 @@
 
 #include "../Components/MapleButton.h"
 
+#include "../../Character/Player.h"
+
 #include "../../Console.h"
 #include "../../Constants.h"
 #include "../../Data/ItemData.h"
@@ -149,7 +151,7 @@ namespace jrc
                 number_end++;
             }
 
-            if (number_end == number_start || number_end >= source.size() || source[number_end] != '#')
+            if (number_end == number_start)
             {
                 return false;
             }
@@ -159,7 +161,22 @@ namespace jrc
                 return false;
             }
 
-            delimiter_pos = number_end;
+            // Quest text spells the item tokens with a colon before the closing
+            // hash - "#t4000018:#" as often as "#t4000018#". Both name the same
+            // item. Not accepting the colon form leaves the digits behind as
+            // loose text, which is what used to litter these dialogues.
+            size_t terminator = number_end;
+            if (terminator < source.size() && source[terminator] == ':')
+            {
+                terminator++;
+            }
+
+            if (terminator >= source.size() || source[terminator] != '#')
+            {
+                return false;
+            }
+
+            delimiter_pos = terminator;
             return true;
         }
 
@@ -289,7 +306,8 @@ namespace jrc
     }
 
     UINpcTalk::UINpcTalk()
-        : height(0),
+        : use_richtext(false),
+          height(0),
           vtile(0),
           dialogue_mode(DialogueMode::UNKNOWN),
           slider(false),
@@ -364,9 +382,17 @@ namespace jrc
         int16_t content_bottom = static_cast<int16_t>(top.height() + height - TEXT_VERTICAL_PADDING);
 
         int16_t text_y = static_cast<int16_t>(get_dialogue_text_y() - scroll_offset);
-        if (text_y + text.height() > content_top && text_y < content_bottom)
+        if (text_y + get_body_height() > content_top && text_y < content_bottom)
         {
-            text.draw(position + Point<int16_t>(DIALOG_TEXT_X, text_y));
+            Point<int16_t> body_at = position + Point<int16_t>(DIALOG_TEXT_X, text_y);
+            if (use_richtext)
+            {
+                richtext.draw(body_at);
+            }
+            else
+            {
+                text.draw(body_at);
+            }
         }
 
         if (!selection_labels.empty())
@@ -633,6 +659,7 @@ namespace jrc
         selections.clear();
         selection_texts.clear();
         selection_labels.clear();
+        use_richtext = false;
         selected = 0;
         hovered_selection = -1;
         end_confirms_dialogue = false;
@@ -650,8 +677,22 @@ namespace jrc
         }
         else
         {
-            prompttext = strip_npc_tokens(processed_tx);
-            text = { Text::A12M, Text::LEFT, Text::DARKGREY, prompttext, TEXT_WIDTH, false };
+            // A page that names an item has to be drawn with that item's icon
+            // in place; plain text has nowhere to put one.
+            use_richtext = QuestSummary::has_pictures(tx);
+            if (use_richtext)
+            {
+                prompttext.clear();
+                richtext.parse(
+                    tx, 0, Stage::get().get_player().get_quests(), TEXT_WIDTH
+                );
+                text = { Text::A12M, Text::LEFT, Text::DARKGREY, "", TEXT_WIDTH, false };
+            }
+            else
+            {
+                prompttext = strip_npc_tokens(processed_tx);
+                text = { Text::A12M, Text::LEFT, Text::DARKGREY, prompttext, TEXT_WIDTH, false };
+            }
         }
 
         if (speakerbyte == 0)
@@ -960,9 +1001,14 @@ namespace jrc
         return selection_height;
     }
 
+    int16_t UINpcTalk::get_body_height() const
+    {
+        return use_richtext ? richtext.height() : text.height();
+    }
+
     int16_t UINpcTalk::get_dialogue_content_height() const
     {
-        int16_t content_height = text.height();
+        int16_t content_height = get_body_height();
         if (!selection_labels.empty())
         {
             if (!prompttext.empty())
@@ -981,7 +1027,7 @@ namespace jrc
 
     int16_t UINpcTalk::get_options_start_y() const
     {
-        int16_t options_y = get_dialogue_text_y() + text.height();
+        int16_t options_y = get_dialogue_text_y() + get_body_height();
         if (!prompttext.empty())
         {
             options_y += OPTION_VERTICAL_GAP;
@@ -1022,6 +1068,19 @@ namespace jrc
         size_t cursor = 0;
         while (cursor < source.size())
         {
+            // Quest text spells some of its line breaks as the two characters
+            // backslash and n. Left alone they print as themselves.
+            if (source[cursor] == '\\' && cursor + 1 < source.size() &&
+                (source[cursor + 1] == 'n' || source[cursor + 1] == 'r'))
+            {
+                if (source[cursor + 1] == 'n')
+                {
+                    stripped.push_back('\n');
+                }
+                cursor += 2;
+                continue;
+            }
+
             if (source[cursor] != '#' || cursor + 1 >= source.size())
             {
                 stripped.push_back(source[cursor]);
@@ -1103,6 +1162,34 @@ namespace jrc
 
             char token = source[cursor + 1];
 
+            // Selection markers are structure, not content, and have to reach
+            // the option parser intact. Passing them through the token rules
+            // below would consume the closing hash of "#L3#" and then read the
+            // option's first letter as a formatting token, so a quest called
+            // "Earn 50 points" would come out as "3arn 50 points".
+            if (token == 'L')
+            {
+                size_t id_end = cursor + 2;
+                while (id_end < source.size() && std::isdigit(static_cast<unsigned char>(source[id_end])))
+                {
+                    id_end++;
+                }
+
+                if (id_end > cursor + 2 && id_end < source.size() && source[id_end] == '#')
+                {
+                    result += source.substr(cursor, id_end + 1 - cursor);
+                    cursor = id_end + 1;
+                    continue;
+                }
+            }
+
+            if (token == 'l')
+            {
+                result += "#l";
+                cursor += 2;
+                continue;
+            }
+
             // Skip zero-parameter formatting tokens (#b, #e, #k, #n, #r, etc.)
             if (is_formatting_token(token))
             {
@@ -1116,6 +1203,23 @@ namespace jrc
                 if (token_end != std::string::npos)
                 {
                     result += Stage::get().get_player().get_stats().get_name();
+                    cursor = token_end + 1;
+                    continue;
+                }
+            }
+
+            // How many of an item the character is carrying. Quest dialogue
+            // uses this to read back progress, so dropping it turns "you have
+            // 12 of 30" into "you have of 30".
+            if (token == 'c' || token == 'C')
+            {
+                int32_t id = 0;
+                size_t token_end = 0;
+                if (try_parse_delimited_number(source, cursor + 2, token_end, id))
+                {
+                    result += std::to_string(
+                        Stage::get().get_player().get_inventory().get_total_item_count(id)
+                    );
                     cursor = token_end + 1;
                     continue;
                 }
