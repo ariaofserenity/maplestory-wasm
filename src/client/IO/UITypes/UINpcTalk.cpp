@@ -666,8 +666,22 @@ namespace jrc
 
         if (dialogue_mode == DialogueMode::SELECTION)
         {
-            parse_selections(processed_tx, prompttext);
-            text = { Text::A12M, Text::LEFT, Text::DARKGREY, prompttext, TEXT_WIDTH, false };
+            std::string raw_prompt;
+            parse_selections(processed_tx, prompttext, raw_prompt);
+
+            // The npc's quest list heads each of its sections with a picture,
+            // which only the rich text renderer can put on screen.
+            use_richtext = QuestSummary::has_pictures(raw_prompt);
+            if (use_richtext)
+            {
+                prompttext.clear();
+                richtext.parse(raw_prompt, 0, TEXT_WIDTH, 0);
+                text = { Text::A12M, Text::LEFT, Text::DARKGREY, "", TEXT_WIDTH, false };
+            }
+            else
+            {
+                text = { Text::A12M, Text::LEFT, Text::DARKGREY, prompttext, TEXT_WIDTH, false };
+            }
             selection_labels.reserve(selection_texts.size());
             for (const std::string& option_text : selection_texts)
             {
@@ -683,9 +697,10 @@ namespace jrc
             if (use_richtext)
             {
                 prompttext.clear();
-                richtext.parse(
-                    tx, 0, Stage::get().get_player().get_quests(), TEXT_WIDTH
-                );
+                // No margin here: the dialogue already indents its body by
+                // DIALOG_TEXT_X, where the reference client keeps the indent
+                // inside the layout instead.
+                richtext.parse(tx, 0, TEXT_WIDTH, 0);
                 text = { Text::A12M, Text::LEFT, Text::DARKGREY, "", TEXT_WIDTH, false };
             }
             else
@@ -902,9 +917,10 @@ namespace jrc
         return UIElement::send_cursor(clicked, cursorpos);
     }
 
-    void UINpcTalk::parse_selections(const std::string& source, std::string& rendered_text)
+    void UINpcTalk::parse_selections(const std::string& source, std::string& rendered_text,
+        std::string& raw_text)
     {
-        rendered_text.clear();
+        raw_text.clear();
         selections.clear();
         selection_texts.clear();
 
@@ -914,11 +930,11 @@ namespace jrc
             size_t begin = source.find("#L", cursor);
             if (begin == std::string::npos)
             {
-                rendered_text += source.substr(cursor);
+                raw_text += source.substr(cursor);
                 break;
             }
 
-            rendered_text += source.substr(cursor, begin - cursor);
+            raw_text += source.substr(cursor, begin - cursor);
 
             size_t id_start = begin + 2;
             size_t id_end = id_start;
@@ -927,7 +943,7 @@ namespace jrc
 
             if (id_end >= source.size() || source[id_end] != '#')
             {
-                rendered_text += source.substr(begin);
+                raw_text += source.substr(begin);
                 break;
             }
 
@@ -945,7 +961,7 @@ namespace jrc
 
             if (id_end == id_start)
             {
-                rendered_text += source.substr(begin, option_end - begin);
+                raw_text += source.substr(begin, option_end - begin);
                 cursor = has_explicit_end ? option_end + 2 : option_end;
                 continue;
             }
@@ -953,7 +969,7 @@ namespace jrc
             int32_t selection_id = 0;
             if (!try_parse_int32(source.substr(id_start, id_end - id_start), selection_id))
             {
-                rendered_text += source.substr(begin, option_end - begin);
+                raw_text += source.substr(begin, option_end - begin);
                 cursor = has_explicit_end ? option_end + 2 : option_end;
                 continue;
             }
@@ -967,7 +983,7 @@ namespace jrc
             cursor = has_explicit_end ? option_end + 2 : option_end;
         }
 
-        rendered_text = strip_npc_tokens(rendered_text);
+        rendered_text = strip_npc_tokens(raw_text);
     }
 
     void UINpcTalk::refresh_selection_styles()
@@ -1188,6 +1204,20 @@ namespace jrc
                 result += "#l";
                 cursor += 2;
                 continue;
+            }
+
+            // A picture is structure too: it is how the npc's quest list
+            // heads each of its sections. It has to reach the renderer whole,
+            // and its path is not a number for the rules below to read.
+            if (token == 'f' || token == 'F')
+            {
+                size_t path_end = source.find('#', cursor + 2);
+                if (path_end != std::string::npos)
+                {
+                    result += source.substr(cursor, path_end + 1 - cursor);
+                    cursor = path_end + 1;
+                    continue;
+                }
             }
 
             // Skip zero-parameter formatting tokens (#b, #e, #k, #n, #r, etc.)

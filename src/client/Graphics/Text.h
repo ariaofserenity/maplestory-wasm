@@ -61,6 +61,9 @@ namespace jrc
             ORANGE,
             MEDIUMBLUE,
             VIOLET,
+            // The colour the #g markup code asks for, which the quest and
+            // dialogue text uses and nothing else did until now.
+            GREEN,
             NUM_COLORS
         };
 

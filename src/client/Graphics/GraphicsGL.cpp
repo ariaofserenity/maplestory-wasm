@@ -561,7 +561,86 @@ namespace jrc
             return;
         }
 
-        quads.emplace_back(rect.l(), rect.r(), rect.t(), rect.b(), getoffset(bmp), color, angle);
+        emit(rect.l(), rect.r(), rect.t(), rect.b(), getoffset(bmp), color, angle);
+    }
+
+    void GraphicsGL::push_cliprect(int16_t x, int16_t y, int16_t w, int16_t h)
+    {
+        Rectangle<int16_t> rect(x, static_cast<int16_t>(x + w),
+            y, static_cast<int16_t>(y + h));
+
+        if (!cliprects.empty())
+        {
+            const Rectangle<int16_t>& outer = cliprects.back();
+            rect = Rectangle<int16_t>(
+                std::max(rect.l(), outer.l()), std::min(rect.r(), outer.r()),
+                std::max(rect.t(), outer.t()), std::min(rect.b(), outer.b()));
+        }
+
+        cliprects.push_back(rect);
+    }
+
+    void GraphicsGL::pop_cliprect()
+    {
+        if (!cliprects.empty())
+        {
+            cliprects.pop_back();
+        }
+    }
+
+    void GraphicsGL::emit(GLshort l, GLshort r, GLshort t, GLshort b,
+        const Offset& o, const Color& color, GLfloat rot)
+    {
+        if (cliprects.empty())
+        {
+            quads.emplace_back(l, r, t, b, o, color, rot);
+            return;
+        }
+
+        const Rectangle<int16_t>& clip = cliprects.back();
+        GLshort cl = std::max<GLshort>(l, clip.l());
+        GLshort cr = std::min<GLshort>(r, clip.r());
+        GLshort ct = std::max<GLshort>(t, clip.t());
+        GLshort cb = std::min<GLshort>(b, clip.b());
+
+        if (cl >= cr || ct >= cb)
+        {
+            return;
+        }
+
+        if (cl == l && cr == r && ct == t && cb == b)
+        {
+            quads.emplace_back(l, r, t, b, o, color, rot);
+            return;
+        }
+
+        // A rotated quad is no longer axis aligned, so trimming its corners
+        // would cut the wrong part of it. Nothing that rotates is drawn
+        // inside a clipped panel, so it is left whole.
+        if (rot != 0.0f)
+        {
+            quads.emplace_back(l, r, t, b, o, color, rot);
+            return;
+        }
+
+        // Take the same bite out of the texture window, so what remains of
+        // the bitmap stays where it was instead of being squeezed into the
+        // smaller rectangle.
+        Offset trimmed = o;
+        if (r > l && o.r != o.l)
+        {
+            GLshort span = o.r - o.l;
+            trimmed.l = static_cast<GLshort>(o.l + span * (cl - l) / (r - l));
+            trimmed.r = static_cast<GLshort>(o.r - span * (r - cr) / (r - l));
+        }
+        if (b > t && o.b != o.t)
+        {
+            GLshort span = o.b - o.t;
+            trimmed.t = static_cast<GLshort>(o.t + span * (ct - t) / (b - t));
+            trimmed.b = static_cast<GLshort>(o.b - span * (b - cb) / (b - t));
+        }
+
+        quads.emplace_back(cl, cr, ct, cb, trimmed, color, rot);
     }
 
     Text::Layout GraphicsGL::createlayout(const std::string& text, Text::Font id,
@@ -806,9 +885,9 @@ namespace jrc
                 GLshort bottom = top + h - 2;
                 Color ntcolor{ 0.0f, 0.0f, 0.0f, 0.6f };
 
-                quads.emplace_back(left, right, top, bottom, nulloffset, ntcolor, 0.0f);
-                quads.emplace_back(left - 1, left, top + 1, bottom - 1, nulloffset, ntcolor, 0.0f);
-                quads.emplace_back(right, right + 1, top + 1, bottom - 1, nulloffset, ntcolor, 0.0f);
+                emit(left, right, top, bottom, nulloffset, ntcolor, 0.0f);
+                emit(left - 1, left, top + 1, bottom - 1, nulloffset, ntcolor, 0.0f);
+                emit(right, right + 1, top + 1, bottom - 1, nulloffset, ntcolor, 0.0f);
             }
             break;
         default:
@@ -828,7 +907,8 @@ namespace jrc
             { 0.25f, 0.25f, 0.25f }, // Darkgrey
             { 1.0f,  0.5f,  0.0f  }, // Orange
             { 0.0f,  0.75f, 1.0f  }, // Mediumblue
-            { 0.5f,  0.0f,  0.5f  }  // Violet
+            { 0.5f,  0.0f,  0.5f  }, // Violet
+            { 0.0f,  0.5f,  0.0f  }  // Green
         };
 
         for (const Text::Layout::Line& line : layout)
@@ -861,7 +941,12 @@ namespace jrc
                     GLshort chw = ch.bw;
                     GLshort chh = ch.bh;
 
-                    if (ax == 0 && c == ' ')
+                    // The layout decides whether a space takes up room: it
+                    // drops one that begins a wrapped line and keeps one that
+                    // begins a run. Asking it, rather than assuming any space
+                    // at the left edge is droppable, is what keeps the space
+                    // between two differently coloured runs.
+                    if (c == ' ' && layout.advance(pos) == layout.advance(pos + 1))
                     {
                         continue;
                     }
@@ -873,7 +958,7 @@ namespace jrc
                         continue;
                     }
 
-                    quads.emplace_back(chx, chx + chw, chy, chy + chh, ch.offset, abscolor, 0.0f);
+                    emit(chx, chx + chw, chy, chy + chh, ch.offset, abscolor, 0.0f);
                 }
             }
         }
@@ -886,7 +971,7 @@ namespace jrc
             return;
         }
 
-        quads.emplace_back(x, x + w, y, y + h, nulloffset, Color{ r, g, b, a }, 0.0f);
+        emit(x, x + w, y, y + h, nulloffset, Color{ r, g, b, a }, 0.0f);
     }
 
     void GraphicsGL::drawscreenfill(float r, float g, float b, float a)

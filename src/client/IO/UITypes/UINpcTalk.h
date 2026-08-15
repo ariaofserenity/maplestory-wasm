@@ -122,7 +122,8 @@ namespace jrc
         // keeps the same window open.
         void run_local(const std::function<void()>& callback);
 
-        void parse_selections(const std::string& text, std::string& rendered_text);
+        void parse_selections(const std::string& text, std::string& rendered_text,
+            std::string& raw_text);
         static std::string strip_npc_tokens(const std::string& text);
         static std::string replace_macros(const std::string& source);
         static DialogueMode resolve_dialogue_mode(int8_t msgtype, bool has_navigation_flags);

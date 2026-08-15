@@ -175,7 +175,11 @@ namespace jrc
                 scrolling = false;
             }
         }
-        else if (relative.x() < 0 || relative.y() < 0 || relative.x() > 8 || relative.y() > vertical.second())
+        // The hit area is as wide as the bar is drawn. It used to be a flat
+        // eight pixels, which is narrower than every one of the scrollbar
+        // graphics, so the right edge of the thumb could not be grabbed.
+        else if (relative.x() < 0 || relative.y() < 0 ||
+            relative.x() > base.get_dimensions().x() || relative.y() > vertical.second())
         {
             thumb.set_state(Button::NORMAL);
             next.set_state(Button::NORMAL);

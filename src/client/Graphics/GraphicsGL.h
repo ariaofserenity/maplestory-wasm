@@ -71,6 +71,16 @@ namespace jrc
         // Fill the screen with the specified color.
         void drawscreenfill(float r, float g, float b, float a);
 
+        // Restrict what the following draws may cover, until the matching
+        // pop. Windows that scroll their contents need this: the reference
+        // client sets a clip rectangle around each scrolling panel so a line
+        // half out of view is cut rather than drawn over the frame.
+        //
+        // Nesting intersects, so an inner panel can never draw outside the
+        // window that holds it.
+        void push_cliprect(int16_t x, int16_t y, int16_t w, int16_t h);
+        void pop_cliprect();
+
         // Lock the current scene.
         void lock();
         // Unlock the scene.
@@ -259,9 +269,15 @@ namespace jrc
         static const GLshort ATLASH = 8192;
         static const GLshort MINLOSIZE = 32;
 
+        // Add one quad to the scene, cut down to the clip rectangle in force.
+        void emit(GLshort l, GLshort r, GLshort t, GLshort b, const Offset& o,
+            const Color& color, GLfloat rot);
+
         bool locked;
 
         std::vector<Quad> quads;
+        // Innermost last. Empty when nothing is clipped.
+        std::vector<Rectangle<int16_t>> cliprects;
         GLuint vbo;
         GLuint ibo;
         GLuint atlas;
