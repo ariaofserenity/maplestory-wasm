@@ -270,6 +270,11 @@ namespace jrc
     };
 
     // The default position of the quest log.
+    struct PosQUESTTRACKER : public Configuration::PointEntry
+    {
+        PosQUESTTRACKER() : PointEntry("PosQUESTTRACKER", "(600,120)") {}
+    };
+
     struct PosQUEST : public Configuration::PointEntry
     {
         PosQUEST() : PointEntry("PosQUEST", "(250,80)") {}

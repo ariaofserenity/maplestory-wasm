@@ -120,9 +120,13 @@ namespace jrc
         }
         else
         {
+            // The enabled arrows are buttons that carry their own place; the
+            // disabled ones are plain graphics, so they have to be told it.
+            // Drawing them at the bare window position dropped both of them
+            // in its top left corner whenever a bar had nothing to scroll.
             dbase.draw({ position + start, fill });
-            dprev.draw({ position });
-            dnext.draw({ position });
+            dprev.draw({ position + start });
+            dnext.draw({ position + end });
         }
     }
 

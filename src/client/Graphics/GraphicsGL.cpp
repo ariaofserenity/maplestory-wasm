@@ -908,7 +908,12 @@ namespace jrc
             { 1.0f,  0.5f,  0.0f  }, // Orange
             { 0.0f,  0.75f, 1.0f  }, // Mediumblue
             { 0.5f,  0.0f,  0.5f  }, // Violet
-            { 0.0f,  0.5f,  0.0f  }  // Green
+            { 0.0f,  0.5f,  0.0f  }, // Green
+            { 0.467f, 0.800f, 1.000f }, // Skyblue   0x77ccff
+            { 1.000f, 0.125f, 0.125f }, // Brightred 0xff2020
+            { 1.000f, 0.200f, 0.600f }, // Redviolet 0xff3399
+            { 1.000f, 0.600f, 0.000f }, // Amber     0xff9900
+            { 0.157f, 0.788f, 0.608f }  // Mint      0x28c99b
         };
 
         for (const Text::Layout::Line& line : layout)

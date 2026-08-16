@@ -353,6 +353,9 @@ namespace jrc
         case BT_SKILL:
             UI::get().send_menu(KeyAction::SKILLBOOK);
             return Button::NORMAL;
+        case BT_QUEST:
+            UI::get().send_menu(KeyAction::QUESTLOG);
+            return Button::NORMAL;
         case BT_KEYSETTING:
             UI::get().send_menu(KeyAction::KEYCONFIG);
             return Button::NORMAL;
@@ -383,6 +386,9 @@ namespace jrc
             set_bubble(BUBBLE_NONE);
             return Button::NORMAL;
         case BT_MENU_QUEST:
+            UI::get().send_menu(KeyAction::QUESTLOG);
+            set_bubble(BUBBLE_NONE);
+            return Button::NORMAL;
         case BT_MENU_MSN:
         case BT_OPTION_CHANNEL:
         case BT_OPTION_GAMEOPTION:

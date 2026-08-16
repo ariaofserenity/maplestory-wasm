@@ -217,6 +217,7 @@ namespace jrc
                 UIElement::ITEMINVENTORY,
                 UIElement::EQUIPINVENTORY,
                 UIElement::SKILLBOOK,
+                UIElement::QUESTLOG,
                 UIElement::PARTY,
                 UIElement::STATSINFO,
                 UIElement::NOTICE

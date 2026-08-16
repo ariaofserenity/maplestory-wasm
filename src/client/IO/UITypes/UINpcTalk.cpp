@@ -49,6 +49,11 @@ namespace jrc
         constexpr int16_t DIALOG_TEXT_Y_OFFSET = 16;
         constexpr int16_t OPTION_VERTICAL_GAP = 2;
         constexpr int16_t HOVER_UNDERLINE_THICKNESS = 1;
+        // How many characters of an npc's page arrive per update tick.
+        // CUtilDlgEx::Update adds exactly one per frame; anything else is a
+        // matter of taste. Halve it to slow the page down, raise it above one
+        // to speed it up, and set it very high to have pages appear whole.
+        constexpr float REVEAL_CHARS_PER_TICK = 0.5f;
         constexpr int8_t SELECTION_DIALOGUE_TYPE = 4;
         constexpr int8_t LEGACY_SELECTION_DIALOGUE_TYPE = 5;
 
@@ -317,6 +322,12 @@ namespace jrc
           local_epoch(0),
           selected(0),
           hovered_selection(-1),
+          pressed_option(-1),
+          option_pressed(false),
+          reveal_piece(0),
+          reveal_chars(0),
+          reveal_progress(0.0f),
+          reveal_done(false),
           scroll_offset(0),
           max_scroll(0)
     {
@@ -362,6 +373,88 @@ namespace jrc
         }
     }
 
+    size_t UINpcTalk::reveal_piece_count() const
+    {
+        return use_richtext ? richtext.get_pieces().size() : 1;
+    }
+
+    size_t UINpcTalk::reveal_piece_length() const
+    {
+        if (!use_richtext)
+        {
+            return prompttext.size();
+        }
+
+        const std::vector<CTInfo>& pieces = richtext.get_pieces();
+        size_t at = static_cast<size_t>(reveal_piece);
+        return at < pieces.size() ? pieces[at].text.size() : 0;
+    }
+
+    void UINpcTalk::advance_reveal()
+    {
+        // A piece that is not text has nothing to spell out, so it shows
+        // whole and the next frame moves past it - which is what Draw does
+        // when it steps m_nCurDisplayItemIndex on.
+        while (static_cast<size_t>(reveal_piece) < reveal_piece_count())
+        {
+            if (static_cast<size_t>(reveal_chars) <= reveal_piece_length())
+            {
+                return;
+            }
+
+            reveal_piece++;
+            reveal_chars = 0;
+        }
+
+        reveal_done = true;
+    }
+
+    bool UINpcTalk::in_text_area(Point<int16_t> relative) const
+    {
+        int16_t content_top = static_cast<int16_t>(top.height() + TEXT_VERTICAL_PADDING);
+        int16_t content_bottom =
+            static_cast<int16_t>(top.height() + height - TEXT_VERTICAL_PADDING);
+
+        return relative.x() >= DIALOG_TEXT_X &&
+            relative.x() <= DIALOG_TEXT_X + TEXT_WIDTH &&
+            relative.y() >= content_top &&
+            relative.y() <= content_bottom;
+    }
+
+    void UINpcTalk::update()
+    {
+        UIElement::update();
+
+        if (!active || reveal_done)
+        {
+            return;
+        }
+
+        // CUtilDlgEx::Update only spells a page out while it is showing an
+        // npc; without one the whole thing is up at once.
+        if (!speaker.is_valid())
+        {
+            reveal_done = true;
+            return;
+        }
+
+        reveal_progress += REVEAL_CHARS_PER_TICK;
+        while (reveal_progress >= 1.0f && !reveal_done)
+        {
+            reveal_progress -= 1.0f;
+            reveal_chars++;
+            advance_reveal();
+        }
+
+        if (!use_richtext && !reveal_done)
+        {
+            size_t shown = std::min<size_t>(
+                prompttext.size(), static_cast<size_t>(reveal_chars));
+            revealtext = { Text::A12M, Text::LEFT, Text::DARKGREY,
+                prompttext.substr(0, shown), TEXT_WIDTH, false };
+        }
+    }
+
     void UINpcTalk::draw(float inter) const
     {
         Point<int16_t> drawpos = position;
@@ -387,11 +480,22 @@ namespace jrc
             Point<int16_t> body_at = position + Point<int16_t>(DIALOG_TEXT_X, text_y);
             if (use_richtext)
             {
-                richtext.draw(body_at);
+                if (reveal_done)
+                {
+                    richtext.draw(body_at);
+                }
+                else
+                {
+                    richtext.draw(body_at, reveal_piece, reveal_chars);
+                }
+            }
+            else if (reveal_done)
+            {
+                text.draw(body_at);
             }
             else
             {
-                text.draw(body_at);
+                revealtext.draw(body_at);
             }
         }
 
@@ -662,6 +766,12 @@ namespace jrc
         use_richtext = false;
         selected = 0;
         hovered_selection = -1;
+        pressed_option = -1;
+        option_pressed = false;
+        reveal_piece = 0;
+        reveal_chars = 0;
+        reveal_progress = 0.0f;
+        reveal_done = false;
         end_confirms_dialogue = false;
 
         if (dialogue_mode == DialogueMode::SELECTION)
@@ -881,6 +991,15 @@ namespace jrc
 
     UIElement::CursorResult UINpcTalk::send_cursor(bool clicked, Point<int16_t> cursorpos)
     {
+        // Clicking the panel the page is written in puts the rest of it up at
+        // once. The reference client has no such shortcut - it spells every
+        // page out to the end - so this is ours, not its.
+        if (active && clicked && !reveal_done && in_text_area(cursorpos - position))
+        {
+            reveal_done = true;
+            return { Cursor::CLICKING, true };
+        }
+
         if (active && dialogue_mode == DialogueMode::SELECTION && !selection_labels.empty())
         {
             Point<int16_t> relative = cursorpos - position;
@@ -893,23 +1012,35 @@ namespace jrc
                 style_changed = true;
             }
 
-            if (hovered_option >= 0 && selected != hovered_option)
-            {
-                selected = hovered_option;
-                style_changed = true;
-            }
-
             if (style_changed)
             {
                 refresh_selection_styles();
             }
 
+            // An option acts on release over the option the press landed on,
+            // which is what CUtilDlgEx::OnMouseButton does with its 0x201 and
+            // 0x202 pair. Hover alone no longer moves the selection, so the
+            // option last passed over stops looking picked.
+            if (clicked && !option_pressed)
+            {
+                option_pressed = true;
+                pressed_option = hovered_option;
+            }
+            else if (!clicked && option_pressed)
+            {
+                option_pressed = false;
+                if (hovered_option >= 0 && hovered_option == pressed_option)
+                {
+                    selected = hovered_option;
+                    refresh_selection_styles();
+                    button_pressed(OK);
+                    return { Cursor::CLICKING, true };
+                }
+                pressed_option = -1;
+            }
+
             if (hovered_option >= 0)
             {
-                if (clicked)
-                {
-                    button_pressed(OK);
-                }
                 return { clicked ? Cursor::CLICKING : Cursor::CANCLICK, true };
             }
         }

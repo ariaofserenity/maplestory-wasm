@@ -39,6 +39,7 @@ namespace jrc
         UINpcTalk();
 
         void draw(float inter) const override;
+        void update() override;
         bool is_in_range(Point<int16_t> cursorpos) const override;
         void send_key(int32_t keycode, bool pressed, bool escape) override;
         void send_scroll(double yoffset) override;
@@ -177,6 +178,32 @@ namespace jrc
         std::vector<int32_t> selections;
         int32_t selected;
         int32_t hovered_selection;
+        // Which option the mouse went down on, so the release only acts when
+        // it comes up over that same one.
+        int32_t pressed_option;
+        bool option_pressed;
+
+        // How much of the page has been shown so far. CUtilDlgEx::Update
+        // steps m_nCurDisplayTextItemPos on once a frame and CUtilDlgEx::Draw
+        // moves on to the next piece when that runs past the end of the one
+        // it is on, so a page arrives a character at a time. It only animates
+        // while an npc is on screen; m_bFinishShow ends it.
+        int32_t reveal_piece;
+        int32_t reveal_chars;
+        // Carries the fraction of a character left over between ticks, so the
+        // reveal can run slower than one character per tick.
+        float reveal_progress;
+        bool reveal_done;
+        // The plain-text page cut to what has arrived, rebuilt as it grows.
+        Text revealtext;
+
+        // Step the reveal on by one character, moving to the next piece once
+        // the current one has all arrived.
+        void advance_reveal();
+        size_t reveal_piece_count() const;
+        size_t reveal_piece_length() const;
+        // Whether the point is over the panel the page is written in.
+        bool in_text_area(Point<int16_t> relative) const;
         int16_t scroll_offset;
         int16_t max_scroll;
     };

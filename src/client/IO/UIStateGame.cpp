@@ -31,6 +31,7 @@
 #include "UITypes/UIMiniMap.h"
 #include "UITypes/UISkillBook.h"
 #include "UITypes/UIQuestLog.h"
+#include "UITypes/UIQuestTracker.h"
 #include "UITypes/UIKeyConfig.h"
 #include "UITypes/UIWorldMap.h"
 
@@ -82,6 +83,7 @@ namespace jrc
 
         emplace<UIStatusMessenger>();
         emplace<UIStatusbar>(stats);
+        emplace<UIQuestTracker>(Stage::get().get_player().get_quests());
         emplace<UIMiniMap>(stats);
         emplace<UIBuffList>();
         emplace<UINpcTalk>();
@@ -356,9 +358,16 @@ namespace jrc
                                 element->remove_cursor(clicked, pos);
                         if (found)
                         {
+                            // The one being displaced is the one that has to
+                            // let the cursor go. Clearing the new front
+                            // instead put its buttons back to normal a moment
+                            // before it was asked to handle the cursor, so a
+                            // button under the pointer was re-entered every
+                            // frame and played its hover sound every frame
+                            // with it.
                             if (front)
                             {
-                                element->remove_cursor(false, pos);
+                                front->remove_cursor(false, pos);
                             }
 
                             front     = element.get();

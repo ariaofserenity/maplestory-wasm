@@ -64,6 +64,14 @@ namespace jrc
             // The colour the #g markup code asks for, which the quest and
             // dialogue text uses and nothing else did until now.
             GREEN,
+            // The quest tracker's own palette, taken from the ARGB its fonts
+            // are created with rather than matched by eye: 0x77ccff,
+            // 0xff2020, 0xff3399, 0xff9900 and 0x28c99b.
+            SKYBLUE,
+            BRIGHTRED,
+            REDVIOLET,
+            AMBER,
+            MINT,
             NUM_COLORS
         };
 

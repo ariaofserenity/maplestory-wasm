@@ -11,6 +11,7 @@
 #include "../../IO/Messages.h"
 #include "../../IO/UITypes/UIParty.h"
 #include "../../IO/UITypes/UIQuestLog.h"
+#include "../../IO/UITypes/UIQuestTracker.h"
 #include "../../IO/UITypes/UIStatusMessenger.h"
 #include "../../IO/UITypes/UIStatusBar.h"
 #include "../../IO/UITypes/UIUserInfo.h"
@@ -490,9 +491,32 @@ namespace jrc
                 break;
             case Questlog::COMPLETED:
                 quests.add_completed(questid, recv.read_long());
+                // The sparkle over the character. The reference client plays
+                // it from CUser::OnEffect on effect 11, and again on
+                // QUEST_CLEAR; this server sends neither for an ordinary
+                // hand-in, so the record turning complete is what fires it.
+                if (previous != Questlog::COMPLETED)
+                {
+                    Stage::get().get_player().show_effect_id(CharEffect::QUEST_CLEAR);
+                    Sound(Sound::QUESTCLEAR).play();
+                }
                 break;
             default:
                 break;
+            }
+
+            if (auto tracker = UI::get().get_element<UIQuestTracker>())
+            {
+                // A quest that has just been taken starts being followed;
+                // anything else only refreshes what is already on the list.
+                if (state == Questlog::STARTED && previous == Questlog::NOT_STARTED)
+                {
+                    tracker->track(questid, true);
+                }
+                else
+                {
+                    tracker->refresh();
+                }
             }
 
             if (auto questlog = UI::get().get_element<UIQuestLog>())
@@ -1036,6 +1060,15 @@ namespace jrc
                 );
             }
 
+            return;
+        }
+
+        if (mode1 == 11) // quest complete
+        {
+            // CUser::OnEffect case 11: Effect/BasicEff.img/QuestClear on the
+            // character, with the QuestClear sound behind it.
+            Stage::get().get_player().show_effect_id(CharEffect::QUEST_CLEAR);
+            Sound(Sound::QUESTCLEAR).play();
             return;
         }
 

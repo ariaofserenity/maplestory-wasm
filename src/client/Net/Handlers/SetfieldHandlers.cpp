@@ -28,6 +28,7 @@
 #include "../../Gameplay/Stage.h"
 #include "../../Graphics/GraphicsGL.h"
 #include "../../IO/UI.h"
+#include "../../IO/UITypes/UIQuestTracker.h"
 #include "../../IO/UITypes/UICharSelect.h"
 #include "../../IO/Window.h"
 
@@ -227,6 +228,13 @@ namespace jrc
             int16_t qid  = recv.read_short();
             int64_t time = recv.read_long();
             quests.add_completed(qid, time);
+        }
+
+        // The tracker is a view of these records, so it can only be filled
+        // once they have arrived.
+        if (auto tracker = UI::get().get_element<UIQuestTracker>())
+        {
+            tracker->refresh();
         }
     }
 
