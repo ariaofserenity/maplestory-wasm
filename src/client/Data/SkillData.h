@@ -58,6 +58,9 @@ namespace jrc
         {
             float damage = 0.0f;
             int32_t matk = 0;
+            // Flat attack the level grants. A summon's whole offence is this
+            // one number - it has no stats of its own and borrows its caster's.
+            int32_t watk = 0;
             int32_t fixdamage = 0;
             int32_t mastery = 0;
             uint8_t attackcount = 0;

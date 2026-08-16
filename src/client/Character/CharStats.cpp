@@ -19,6 +19,9 @@
 
 #include "StatCaps.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace jrc
 {
     CharStats::CharStats(const StatsEntry& s)
@@ -52,8 +55,9 @@ namespace jrc
         honor = 0;
         attackspeed = 0;
         projectilerange = 400;
-        // Unmastered attacks still retain a small lower bound instead of dropping to the secondary stat alone.
-        mastery = 0.1f;
+        // Zero until a mastery skill says otherwise; the weapon's own floor
+        // takes over from there, so an unmastered attack still has a bound.
+        mastery = 0.0f;
         critical = 0.05f;
         // Only Critical Shot and Sharp Eyes state what a critical is worth, so
         // a character with neither keeps the flat half-again the client has
@@ -84,7 +88,39 @@ namespace jrc
         int32_t attack = get_total(Equipstat::WATK);
         float multiplier = damagepercent + static_cast<float>(attack) / 100;
         maxdamage = static_cast<int32_t>((primary + secondary) * multiplier);
-        mindamage = static_cast<int32_t>(((primary * 0.9f * mastery) + secondary) * multiplier);
+        // The floor is a straight share of the ceiling. Weighting the primary
+        // stat by mastery and leaving the secondary one alone, as this used to,
+        // made the real floor drift below what the mastery skill promises -
+        // enough for a maxed Bow Mastery's 60% to land nearer 54%.
+        mindamage = static_cast<int32_t>(
+            std::round(maxdamage * mastery_ratio())
+        );
+    }
+
+    float CharStats::mastery_ratio() const
+    {
+        // Every weapon deals at least a fixed share of its maximum even with no
+        // mastery skill at all, and how large that share is depends on what is
+        // being swung. Nothing exceeds 95% however much mastery is stacked.
+        constexpr float MASTERY_CAP = 0.95f;
+        return std::min(std::max(mastery, unmastered_floor()), MASTERY_CAP);
+    }
+
+    float CharStats::unmastered_floor() const
+    {
+        switch (weapontype)
+        {
+        case Weapon::WAND:
+        case Weapon::STAFF:
+            return 0.25f;
+        case Weapon::BOW:
+        case Weapon::CROSSBOW:
+        case Weapon::CLAW:
+        case Weapon::GUN:
+            return 0.15f;
+        default:
+            return 0.20f;
+        }
     }
 
     int32_t CharStats::calculateaccuracy() const

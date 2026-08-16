@@ -73,6 +73,9 @@ namespace jrc
         const std::string& get_jobname() const;
         Weapon::Type get_weapontype() const;
         float get_mastery() const;
+        // The share of a maximum hit the minimum one is, once the weapon's own
+        // floor and the game's ceiling are taken into account.
+        float mastery_ratio() const;
         float get_critical() const;
         float get_critdamage() const;
         float get_reducedamage() const;
@@ -90,6 +93,8 @@ namespace jrc
 
     private:
         int32_t calculateaccuracy() const;
+        // How much of its maximum this weapon deals with no mastery skill.
+        float unmastered_floor() const;
         int32_t get_primary_stat() const;
         int32_t get_secondary_stat() const;
         float get_multiplier() const;

@@ -51,6 +51,8 @@ namespace jrc
 
         bool is_attack() const override;
         bool is_skill() const override;
+        bool is_passive() const override;
+        bool needs_position() const override;
         int32_t get_id() const override;
 
         ForbidReason can_use(int32_t level, Weapon::Type weapon,

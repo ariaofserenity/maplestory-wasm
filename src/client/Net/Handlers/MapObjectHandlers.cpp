@@ -579,4 +579,87 @@ namespace jrc
         Stage::get().get_reactors()
             .remove(oid, state, point);
     }
+
+
+    void SpawnSummonHandler::handle(InPacket& recv) const
+    {
+        int32_t owner = recv.read_int();
+        int32_t oid = recv.read_int();
+        int32_t skillid = recv.read_int();
+
+        // The version byte the server writes before the skill level.
+        recv.skip(1);
+
+        int32_t skilllevel = recv.read_byte();
+        Point<int16_t> position = recv.read_point();
+
+        // The stance byte doubles as the direction the summon faces, the same
+        // way a character's does: the low bit is set when it faces right.
+        uint8_t stance = recv.read_byte();
+
+        // The foothold it was placed on, which the client works out for itself
+        // from the position it was given.
+        recv.skip(2);
+
+        int8_t movementtype = recv.read_byte();
+        bool attacks = recv.read_bool();
+
+        Stage::get().get_summons().spawn(
+            oid, owner, skillid, skilllevel,
+            static_cast<Summon::MovementType>(movementtype), attacks,
+            position, (stance % 2) == 0
+        );
+    }
+
+
+    void RemoveSummonHandler::handle(InPacket& recv) const
+    {
+        int32_t owner = recv.read_int();
+        int32_t oid = recv.read_int();
+        // 1 vanishes, anything else plays the death animation.
+        int8_t mode = recv.read_byte();
+
+        Stage::get().get_summons().remove(owner, oid, mode != 1);
+    }
+
+
+    void MoveSummonHandler::handle(InPacket& recv) const
+    {
+        int32_t owner = recv.read_int();
+        int32_t oid = recv.read_int();
+        recv.read_point();
+
+        std::vector<Movement> movements = MovementParser::parse_movements(recv);
+        if (movements.empty())
+            return;
+
+        const Movement& last = movements.back();
+        Stage::get().get_summons().send_movement(
+            owner, oid, Point<int16_t>(last.xpos, last.ypos),
+            (last.newstate % 2) == 0
+        );
+    }
+
+
+    void SummonAttackHandler::handle(InPacket& recv) const
+    {
+        int32_t owner = recv.read_int();
+        int32_t oid = recv.read_int();
+        // Character level and the direction the summon swung in. The damage
+        // that follows is the owner's client's business; every other client
+        // only plays the swing, and the server has already told it what each
+        // monster's health now is.
+        recv.skip(2);
+
+        Stage::get().get_summons().show_attack(owner, oid);
+    }
+
+
+    void DamageSummonHandler::handle(InPacket& recv) const
+    {
+        int32_t owner = recv.read_int();
+        int32_t oid = recv.read_int();
+
+        Stage::get().get_summons().show_hit(owner, oid);
+    }
 }

@@ -546,6 +546,7 @@ namespace jrc
         // Bomb - whose level data has no damage field at all - hitting for 1.
         parsed.damage      = (float)sub["damage"].get_integer(100) / 100;
         parsed.matk        = sub["mad"];
+        parsed.watk        = sub["pad"];
         parsed.fixdamage   = sub["fixdamage"];
         parsed.mastery     = sub["mastery"];
         parsed.attackcount = (uint8_t)sub["attackCount"].get_integer(1);

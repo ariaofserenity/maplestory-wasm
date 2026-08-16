@@ -30,6 +30,7 @@
 #include "MapleMap/MapReactors.h"
 #include "MapleMap/MapNpcs.h"
 #include "MapleMap/MapDrops.h"
+#include "MapleMap/MapSummons.h"
 #include "Physics/Physics.h"
 
 #include "../Character/Player.h"
@@ -91,6 +92,8 @@ namespace jrc
         MapReactors& get_reactors();
         // Returns a reference to the drops on the current map.
         MapDrops& get_drops();
+        // Returns a reference to the summons on the current map.
+        MapSummons& get_summons();
         // Returns a reference to the Player.
         Player& get_player();
         // Returns the id of the current map.
@@ -141,6 +144,7 @@ namespace jrc
         MapChars chars;
         MapMobs mobs;
         MapDrops drops;
+        MapSummons summons;
         MapEffect effect;
 
         Combat combat;

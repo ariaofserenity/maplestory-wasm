@@ -1,32 +1,50 @@
 #include "GroundEffect.h"
 
 #include "../../Constants.h"
+#include "../../Util/Randomizer.h"
+
+#include "SpecialMove.h"
+
+#include <algorithm>
 
 namespace jrc
 {
+    namespace
+    {
+        const Randomizer randomizer;
+    }
+
     GroundEffect::GroundEffect(Animation a, Point<int16_t> p,
-        uint16_t lifetime, bool f)
+        uint16_t hold, bool f)
         : animation(a), position(p), flip(f)
     {
-        remaining = (lifetime > 0) ? lifetime : Constants::TIMESTEP;
-        this->lifetime = remaining;
+        // The hold is only the middle of the effect's life: it fades up to full
+        // strength first and away again afterwards, and is only dropped once
+        // that last fade is over.
+        fadein = (randomizer.next_int<int32_t>(TILE_FADE_IN_STEPS) + 1)
+            * TILE_FADE_IN_STEP;
+        peak = static_cast<float>(
+            randomizer.next_int<int32_t>(TILE_ALPHA_MIN, TILE_ALPHA_MAX + 1)
+        ) / TILE_ALPHA_MAX;
+
+        lifetime = std::max<int32_t>(hold, Constants::TIMESTEP)
+            + TILE_FADE_OUT_MS;
+        remaining = lifetime;
     }
 
     float GroundEffect::opacity() const
     {
-        // Burn out over the closing slice, and ease in briefly so a strip of
-        // tiles does not snap on all at once.
-        constexpr int32_t FADE_IN_MS = 120;
-        constexpr int32_t FADE_OUT_MS = 500;
-
+        // Fading up from nothing over a stretch rolled for this tile alone is
+        // what makes a row of them light one after another rather than all at
+        // once - each patch of fire catches as its own arrow reaches it.
         int32_t elapsed = lifetime - remaining;
-        if (elapsed < FADE_IN_MS)
-            return static_cast<float>(elapsed) / FADE_IN_MS;
+        if (elapsed < fadein)
+            return peak * elapsed / fadein;
 
-        if (remaining < FADE_OUT_MS)
-            return static_cast<float>(remaining) / FADE_OUT_MS;
+        if (remaining < TILE_FADE_OUT_MS)
+            return peak * remaining / TILE_FADE_OUT_MS;
 
-        return 1.0f;
+        return peak;
     }
 
     void GroundEffect::draw(double viewx, double viewy, float alpha) const

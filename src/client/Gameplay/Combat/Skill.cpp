@@ -345,7 +345,24 @@ namespace jrc
         int32_t level = user.get_skilllevel(skillid);
 
         AreaEffect out;
-        out.tile = data.get_tile();
+        // How long the tiles hold once they are up. The reference client hands
+        // the foothold registrar a number chosen per skill at the call site
+        // rather than anything out of the game files - the level's own duration
+        // is how long the skill's debuff lasts on a monster, which is ten times
+        // longer and left Inferno's fire burning through the next volley.
+        out.lifetime = tile_hold_time(skillid);
+
+        // The tile node's numbered children are the variants a single tile may
+        // be drawn as; effectDistance is the gap the client leaves between one
+        // tile and the next. Reading the node itself as an animation is what
+        // left Inferno painting nothing: its frames are those variants, not
+        // canvases.
+        nl::node tile = data.get_tile();
+        for (int32_t i = 0; nl::node sub = tile[std::to_string(i)]; i++)
+        {
+            out.tiles.push_back(sub);
+        }
+        out.tilestep = tile["effectDistance"];
 
         nl::node special = data.get_special(user.get_level(), level);
         if (!special)
@@ -392,9 +409,6 @@ namespace jrc
             // once where the move landed.
             out.kind = EMIT_ONCE;
             out.special = special;
-            out.lifetime = static_cast<uint16_t>(
-                std::min(data.get_stats(level).duration, 60000)
-            );
             return out;
         }
 
@@ -417,9 +431,6 @@ namespace jrc
         out.falltime = special["fall"];
         out.alpha    = special["a"];
         out.spawnbox = data.get_stats(level).range;
-        out.lifetime = static_cast<uint16_t>(
-            std::min(data.get_stats(level).duration, 60000)
-        );
 
         if (out.count <= 0)
         {
@@ -482,6 +493,19 @@ namespace jrc
     bool Skill::is_skill() const
     {
         return true;
+    }
+
+    bool Skill::is_passive() const
+    {
+        return SkillData::get(skillid).is_passive();
+    }
+
+    bool Skill::needs_position() const
+    {
+        // A summon node is what the game files give a skill that leaves a
+        // creature behind, so it also answers which skills have to tell the
+        // server where that creature goes.
+        return static_cast<bool>(SkillData::get(skillid).get_summon());
     }
 
     int32_t Skill::get_id() const

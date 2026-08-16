@@ -123,6 +123,12 @@ namespace jrc
         CANCEL_BUFF  = 92,
         SKILL_EFFECT = 93,
 
+        // Summon. The client that owns a summon drives it and reports what it
+        // did; every other client only plays back what the server repeats.
+        MOVE_SUMMON   = 175,
+        SUMMON_ATTACK = 176,
+        DAMAGE_SUMMON = 177,
+
         // Gameplay 2
         PARTY_OPERATION    = 124,
         DENY_PARTY_REQUEST = 125,

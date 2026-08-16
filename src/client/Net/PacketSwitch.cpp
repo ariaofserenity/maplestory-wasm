@@ -117,6 +117,14 @@ namespace jrc
         SPAWN_PET  = 168,
         CHAR_MOVED = 185,
 
+        // Summons. Spawn and remove are the generic special-map-object
+        // opcodes, which in v83 carry nothing else.
+        SPAWN_SUMMON  = 175,
+        REMOVE_SUMMON = 176,
+        MOVE_SUMMON   = 177,
+        SUMMON_ATTACK = 178,
+        DAMAGE_SUMMON = 179,
+
         // Attack
         ATTACKED_CLOSE  = 186,
         ATTACKED_RANGED = 187,
@@ -199,6 +207,11 @@ namespace jrc
         emplace<REMOVE_LOOT, RemoveLootHandler>();
         emplace<SPAWN_REACTOR, SpawnReactorHandler>();
         emplace<REMOVE_REACTOR, RemoveReactorHandler>();
+        emplace<SPAWN_SUMMON, SpawnSummonHandler>();
+        emplace<REMOVE_SUMMON, RemoveSummonHandler>();
+        emplace<MOVE_SUMMON, MoveSummonHandler>();
+        emplace<SUMMON_ATTACK, SummonAttackHandler>();
+        emplace<DAMAGE_SUMMON, DamageSummonHandler>();
 
         // Attack handlers
         emplace<ATTACKED_CLOSE, CloseAttackHandler>();

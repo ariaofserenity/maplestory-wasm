@@ -19,6 +19,7 @@
 #include "../OutPacket.h"
 
 #include "../../Gameplay/Combat/Attack.h"
+#include "../../Gameplay/Combat/SpecialMove.h"
 
 namespace jrc
 {
@@ -36,7 +37,11 @@ namespace jrc
 
             write_byte((attack.mobcount << 4) | attack.hitcount);
             write_int(attack.skill);
-            if (attack.charge > 0)
+
+            // A charging skill reports how long its key was held. Which of the
+            // packet's two slots that number goes in is per skill; see
+            // keydown_reported_late.
+            if (attack.keydown && !keydown_reported_late(attack.skill))
                 write_int(attack.charge);
 
             skip(8);
@@ -54,7 +59,8 @@ namespace jrc
                 skip(1);
                 write_byte(attack.toleft);
                 skip(7);
-                // skip(4); if hurricane, piercing arrow or rapidfire
+                if (attack.keydown && keydown_reported_late(attack.skill))
+                    write_int(attack.charge);
             }
             else
             {
@@ -129,6 +135,27 @@ namespace jrc
     public:
         UseSkillPacket(int32_t skillid, int32_t level) : OutPacket(USE_SKILL)
         {
+            write_header(skillid, level);
+        }
+
+        // A skill that puts something on the ground says where. The server
+        // decides whether a position was sent by counting the bytes left over
+        // once it has read the header, and only accepts exactly five - the
+        // point plus one trailing byte it never reads. Sending the point on its
+        // own leaves four and is ignored, which is why a summon cast this way
+        // produced no summon at all.
+        UseSkillPacket(int32_t skillid, int32_t level, Point<int16_t> position)
+            : OutPacket(USE_SKILL) {
+
+            write_header(skillid, level);
+            write_short(position.x());
+            write_short(position.y());
+            skip(1);
+        }
+
+    private:
+        void write_header(int32_t skillid, int32_t level)
+        {
             write_time();
             write_int(skillid);
             write_byte(static_cast<uint8_t>(level));
@@ -137,8 +164,6 @@ namespace jrc
 
             if (skillid % 10000000 == 1004)
                 skip(2); // no idea what this could be
-
-            // a point (4 bytes) could be added at the end
         }
     };
 

@@ -186,6 +186,10 @@ namespace jrc
             // Crossbowman
             CROSSBOW_MASTERY = 3200000,
 
+            // Marksman
+            MARKSMAN_BOOST = 3220004,
+            PIERCING_ARROW = 3221001,
+
             // Hermit
             DRAIN = 4101005,
             AVENGER = 4111005,
@@ -221,7 +225,15 @@ namespace jrc
 
             // Aran
             POLEARM_MASTERY_ARAN = 21100000,
-            HIGH_MASTERY_ARAN = 21120001
+            HIGH_MASTERY_ARAN = 21120001,
+
+            // Cygnus Knights. The weapon masteries of the four knight lines
+            // that hold a physical weapon, each mirroring an explorer skill.
+            SWORD_MASTERY_DW = 11100000,
+            BOW_MASTERY_WA = 13100000,
+            BOW_EXPERT_WA = 13110003,
+            CLAW_MASTERY_NW = 14100000,
+            KNUCKLER_MASTERY_TB = 15100001
         };
     }
 }

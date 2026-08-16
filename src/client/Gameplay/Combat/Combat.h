@@ -55,6 +55,11 @@ namespace jrc
 
         // Add an attack to the attack queue.
         void push_attack(const AttackResult& attack);
+        // Show what one of the player's summons just hit: a damage number over
+        // every monster it caught, applied on the cadence the client hits them
+        // at rather than all on the frame the swing began.
+        void apply_summon_damage(const AttackResult& result,
+            const AttackUser& user, uint16_t attackafter);
         // Show a buff effect.
         void show_buff(int32_t cid, int32_t skillid, int8_t level);
         // Show a buff effect.
@@ -121,17 +126,23 @@ namespace jrc
             SpecialMove::CastKind kind = SpecialMove::CAST_INSTANT;
             // Wind-up left to run, in ms.
             int32_t remaining = 0;
-            // Time until this keydown move fires again, in ms.
+            // Time until this keydown move fires again, in ms. Only a move that
+            // keeps firing while held uses it.
             int32_t nextshot = 0;
+            // How long the key has been held, in ms. This is the charge the
+            // server is told about when the move finally goes off.
+            int32_t held = 0;
             bool active = false;
         };
 
         void apply_attack(const AttackResult& attack);
-        void apply_move(const SpecialMove& move);
+        void apply_move(const SpecialMove& move, int32_t charge = 0);
         // Swing a move that deals damage: roll its targets, show its effects and
         // tell the server. Split out because a final attack goes through the
         // same path without being something the player asked for.
-        void apply_attack_move(const SpecialMove& move);
+        // charge is how long a charging move was held for; zero for everything
+        // else, and for the volleys a move looses while still being held.
+        void apply_attack_move(const SpecialMove& move, int32_t charge = 0);
         // Roll whether the move that was just swung sets off a follow-up attack.
         void try_register_final_attack(const SpecialMove& move);
         // Run a pending follow-up attack forward one tick.
@@ -146,6 +157,9 @@ namespace jrc
         void show_cast_effect(nl::node src);
         // Start the cooldown a move imposes, if any.
         void start_cooldown(const SpecialMove& move);
+        // Tell the server a skill was used, with where it was cast when the
+        // skill needs the server to know.
+        void send_use_skill(const SpecialMove& move);
         void apply_use_movement(const SpecialMove& move);
         void apply_result_movement(const SpecialMove& move, const AttackResult& result);
         void apply_rush(const AttackResult& result);
@@ -156,7 +170,11 @@ namespace jrc
         // When each struck target takes its damage, in ms after the attack is
         // applied - one entry per damage line, in the order they arrive. Empty
         // for a close attack, whose cadence has not been reversed.
-        std::vector<uint16_t> hit_delays(const Char& user, const AttackResult& result) const;
+        std::vector<uint16_t> hit_delays(const Char& user,
+            const AttackResult& result, int32_t shootdelay) const;
+        // Lay a skill's tiles across the ground the area effect covers.
+        void lay_tiles(const Char& user, const SpecialMove::AreaEffect& area,
+            Rectangle<int16_t> box, uint16_t delay, bool flip);
         std::vector<DamageNumber> place_numbers(int32_t oid, const std::vector<std::pair<int32_t, bool>>& damagelines);
         const SpecialMove& get_move(int32_t move_id);
 

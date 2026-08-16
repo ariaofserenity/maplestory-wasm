@@ -154,6 +154,19 @@ namespace jrc
         // Crossbowman
         buffs[SkillId::CROSSBOW_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::CROSSBOW>>();
 
+        // Marksman. The crossbow's fourth-job mastery, and the counterpart of
+        // Bow Expert down to raising weapon attack rather than accuracy.
+        buffs[SkillId::MARKSMAN_BOOST] = std::make_unique<WeaponMasteryBuff<Equipstat::WATK, Weapon::CROSSBOW>>();
+
+        // Cygnus Knights. The client picks between these and the explorer
+        // masteries by job; asking which of the two the character has a level
+        // in comes to the same thing, so both are simply registered.
+        buffs[SkillId::BOW_MASTERY_WA] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::BOW>>();
+        buffs[SkillId::BOW_EXPERT_WA] = std::make_unique<WeaponMasteryBuff<Equipstat::WATK, Weapon::BOW>>();
+        buffs[SkillId::SWORD_MASTERY_DW] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::SWORD_1H, Weapon::SWORD_2H>>();
+        buffs[SkillId::CLAW_MASTERY_NW] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::CLAW>>();
+        buffs[SkillId::KNUCKLER_MASTERY_TB] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::KNUCKLE>>();
+
         // Assassin
         buffs[SkillId::CLAW_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::CLAW>>();
 

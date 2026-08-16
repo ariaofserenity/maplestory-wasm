@@ -257,6 +257,104 @@ namespace jrc
         }
     }
 
+    // How often a charging skill looses another volley while its key is held,
+    // in ms. Zero means the skill fires once, when the key comes up, which is
+    // what all but these few do - Piercing Arrow and every charged cast are
+    // held to build one shot rather than to keep shooting.
+    inline uint16_t keydown_repeat_interval(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3121004:  // Hurricane
+        case 13111002: // Hurricane (Wind Archer)
+        case 33121009:
+        case 5221004:  // Rapid Fire
+            return 100;
+        case 35001001:
+        case 35101009:
+            return 300;
+        default:
+            return 0;
+        }
+    }
+
+    // The longest a skill's charge gauge runs, in ms. Holding the key beyond
+    // this adds nothing, and the client reports the capped value rather than
+    // the real one.
+    inline uint16_t keydown_max_gauge(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3221001:  // Piercing Arrow
+        case 33101005:
+            return 900;
+        case 2121001:  // Big Bang (F/P)
+        case 2221001:  // Big Bang (I/L)
+        case 2321001:  // Big Bang (Bishop)
+        case 5101004:  // Corkscrew Blow
+        case 15101003: // Corkscrew Blow (Thunder Breaker)
+        case 5201002:  // Grenade
+        case 14111006: // Poison Bomb
+            return 1000;
+        case 22121000: // Ice Breath
+        case 22151001: // Fire Breath
+            return 500;
+        default:
+            return 2000;
+        }
+    }
+
+    // The shortest charge the client will report. A tap that barely registers
+    // still counts as this much.
+    constexpr uint16_t KEYDOWN_MIN_GAUGE = 30;
+
+    // How long a skill's tiles hold at full strength before they fade, in ms.
+    // The reference client states this per skill where it registers them.
+    inline uint16_t tile_hold_time(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3111003:  // Inferno
+            return 500;
+        case 33121005:
+            return 3300;
+        default:
+            return 500;
+        }
+    }
+
+    // A tile is revealed by fading up to an opacity rolled per tile, out of
+    // 255, so a stretch of fire does not read as one flat sheet.
+    constexpr int16_t TILE_ALPHA_MIN = 128;
+    constexpr int16_t TILE_ALPHA_MAX = 255;
+    // How long that fade takes: a multiple of this, one to five, per tile. The
+    // spread is what staggers the tiles so each patch lights as an arrow
+    // reaches it rather than all of them together.
+    constexpr int32_t TILE_FADE_IN_STEP = 100;
+    constexpr int32_t TILE_FADE_IN_STEPS = 5;
+    // How long they take to fade away once their hold is over.
+    constexpr int32_t TILE_FADE_OUT_MS = 500;
+
+    // Where in an attack packet a charging skill's gauge is written. Almost
+    // every one puts it directly behind the skill id; these four put it at the
+    // end of the shoot block instead, and they are the four that keep firing
+    // for as long as they are held rather than spending the charge on one shot.
+    // Grenade and Poison Bomb are fired from a weapon too and still use the
+    // first position, so the attack type cannot stand in for this list.
+    inline bool keydown_reported_late(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3121004:  // Hurricane
+        case 3221001:  // Piercing Arrow
+        case 5221004:  // Rapid Fire
+        case 13111002: // Hurricane (Wind Archer)
+            return true;
+        default:
+            return false;
+        }
+    }
+
     // Base class for attacks and buffs.
     class SpecialMove
     {
@@ -349,8 +447,14 @@ namespace jrc
             int16_t lifttop = 0;
             int16_t liftbottom = 0;
 
-            // Left on the terrain for lifetime ms.
-            nl::node tile;
+            // Left on the terrain for lifetime ms. A tile node holds a set of
+            // animations rather than one, the same way special does: the client
+            // lays a row of them across the affected ground and picks between
+            // the variants for each, which is what makes a burning stretch of
+            // floor read as fire rather than as one repeated sprite.
+            std::vector<nl::node> tiles;
+            // How far apart along the ground consecutive tiles are laid.
+            int16_t tilestep = 0;
             uint16_t lifetime = 0;
         };
 
@@ -409,6 +513,18 @@ namespace jrc
 
         virtual bool is_attack() const = 0;
         virtual bool is_skill() const = 0;
+        // Whether the move is one the player never uses directly. A regular
+        // attack never is; only a skill can be.
+        virtual bool is_passive() const
+        {
+            return false;
+        }
+        // Whether the server needs to be told where the move was cast. Only a
+        // move that leaves something standing on the map does.
+        virtual bool needs_position() const
+        {
+            return false;
+        }
         virtual int32_t get_id() const = 0;
 
         virtual ForbidReason can_use(int32_t level, Weapon::Type weapon,

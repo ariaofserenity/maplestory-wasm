@@ -344,7 +344,9 @@ namespace jrc
         {
             int32_t skill_id    = icon->get_id();
             int32_t skill_level = skillbook.get_level(skill_id);
-            if (skill_level > 0)
+            // A passive is always in effect and has nothing to trigger, the
+            // same reason it cannot be dragged onto a key.
+            if (skill_level > 0 && !SkillData::get(skill_id).is_passive())
             {
                 Stage::get().get_combat().use_move(skill_id);
             }

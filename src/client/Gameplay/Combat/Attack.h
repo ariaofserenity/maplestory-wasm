@@ -154,6 +154,12 @@ namespace jrc
         uint8_t mobcount = 0;
         uint8_t hitcount = 1;
         int32_t skill    = 0;
+        // Whether the skill charges while its key is held, and for how long it
+        // had been held when this volley went off. The server expects the
+        // number from every charging skill, so the flag has to travel with the
+        // result rather than being worked out again when the packet is built -
+        // an attack arriving over the wire has no skill data to consult.
+        bool keydown     = false;
         int32_t charge   = 0;
         int32_t bullet   = 0;
         uint8_t level    = 0;

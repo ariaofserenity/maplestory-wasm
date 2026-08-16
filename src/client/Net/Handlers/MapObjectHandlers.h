@@ -162,4 +162,44 @@ namespace jrc
     {
         void handle(InPacket& recv) const override;
     };
+
+
+    // Put a summon on the map.
+    // Opcode: SPAWN_SUMMON(175)
+    class SpawnSummonHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
+
+
+    // Take a summon off the map.
+    // Opcode: REMOVE_SUMMON(176)
+    class RemoveSummonHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
+
+
+    // Move somebody else's summon.
+    // Opcode: MOVE_SUMMON(177)
+    class MoveSummonHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
+
+
+    // Show somebody else's summon swinging.
+    // Opcode: SUMMON_ATTACK(178)
+    class SummonAttackHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
+
+
+    // Show a summon taking damage.
+    // Opcode: DAMAGE_SUMMON(179)
+    class DamageSummonHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
 }

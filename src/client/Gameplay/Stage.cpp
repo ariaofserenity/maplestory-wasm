@@ -91,6 +91,7 @@ namespace jrc
         npcs.clear();
         mobs.clear();
         drops.clear();
+        summons.clear();
         reactors.clear();
     }
 
@@ -142,6 +143,7 @@ namespace jrc
             reactors.draw(id, viewx, viewy, alpha);
             npcs.draw(id, viewx, viewy, alpha);
             mobs.draw(id, viewx, viewy, alpha);
+            summons.draw(id, viewx, viewy, alpha);
             chars.draw(id, viewx, viewy, alpha);
             player.draw(id, viewx, viewy, alpha);
             drops.draw(id, viewx, viewy, alpha);
@@ -169,6 +171,9 @@ namespace jrc
         mobs.update(physics);
         chars.update(physics);
         drops.update(physics);
+        // After the mobs, so a summon swings at where they have just moved to,
+        // and before the player, whose position it trails.
+        summons.update(physics, player, mobs, combat);
         player.update(physics);
         if (is_intro_input_locked())
         {
@@ -542,6 +547,11 @@ namespace jrc
     MapDrops& Stage::get_drops()
     {
         return drops;
+    }
+
+    MapSummons& Stage::get_summons()
+    {
+        return summons;
     }
 
     Player& Stage::get_player()

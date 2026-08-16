@@ -15,8 +15,10 @@ namespace jrc
     class GroundEffect
     {
     public:
+        // hold is how long the effect stays at full strength; the fades either
+        // side of it are added on top.
         GroundEffect(Animation animation, Point<int16_t> position,
-            uint16_t lifetime, bool flip);
+            uint16_t hold, bool flip);
 
         void draw(double viewx, double viewy, float alpha) const;
         // Advance one tick. Returns true once the effect has expired.
@@ -30,6 +32,11 @@ namespace jrc
         Point<int16_t> position;
         int32_t lifetime;
         int32_t remaining;
+        // How long this one takes to fade up, and how solid it gets. Both are
+        // rolled per effect rather than shared, which is what staggers a row of
+        // them.
+        int32_t fadein;
+        float peak;
         bool flip;
     };
 }
