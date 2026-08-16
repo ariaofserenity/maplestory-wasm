@@ -145,8 +145,12 @@ namespace jrc
         // Hunter
         buffs[SkillId::BOW_MASTERY] = std::make_unique<WeaponMasteryBuff<Equipstat::ACC, Weapon::BOW>>();
 
-        // Ranger
+        // Ranger, and the same skill on the two other bow lines. Each job has
+        // its own copy with its own id, so registering one of the three left
+        // snipers and wind archers walking at their base speed.
         buffs[SkillId::THRUST] = stat_bonus({ { "speed", Equipstat::SPEED } });
+        buffs[SkillId::THRUST_SNIPER] = stat_bonus({ { "speed", Equipstat::SPEED } });
+        buffs[SkillId::THRUST_WA] = stat_bonus({ { "speed", Equipstat::SPEED } });
 
         // Bowmaster
         buffs[SkillId::BOW_EXPERT] = std::make_unique<WeaponMasteryBuff<Equipstat::WATK, Weapon::BOW>>();

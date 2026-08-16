@@ -84,7 +84,10 @@ namespace jrc
         /// Return wether the player can use a skill or not.
         SpecialMove::ForbidReason can_use(const SpecialMove& move) const;
         /// Create an attack struct using the player's stats.
-        Attack prepare_attack(bool skill) const;
+        // closerange says a monster is already inside the weapon's own swing,
+        // which is what turns a bow into something to hit with rather than
+        // something to shoot with.
+        Attack prepare_attack(bool skill, bool closerange) const;
 
         /// Execute a rush movement.
         void rush(double targetx);
@@ -135,6 +138,11 @@ namespace jrc
         /// Returns the flying force.
         float get_flyforce() const;
 
+        /// Whether the player is in a position to loose a shot at all. A bow or
+        /// a crossbow cannot be brought to bear in mid-air; the reference
+        /// client singles out those two weapons and lets a claw or a gun fire
+        /// while falling.
+        bool can_shoot() const;
         /// Return wether the player is underwater.
         bool is_underwater() const;
         /// Returns if a Keyaction is currently active.

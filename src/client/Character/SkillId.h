@@ -186,6 +186,9 @@ namespace jrc
             // Crossbowman
             CROSSBOW_MASTERY = 3200000,
 
+            // Sniper
+            THRUST_SNIPER = 3210000,
+
             // Marksman
             MARKSMAN_BOOST = 3220004,
             PIERCING_ARROW = 3221001,
@@ -231,6 +234,7 @@ namespace jrc
             // that hold a physical weapon, each mirroring an explorer skill.
             SWORD_MASTERY_DW = 11100000,
             BOW_MASTERY_WA = 13100000,
+            THRUST_WA = 13100004,
             BOW_EXPERT_WA = 13110003,
             CLAW_MASTERY_NW = 14100000,
             KNUCKLER_MASTERY_TB = 15100001

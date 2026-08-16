@@ -422,6 +422,11 @@ namespace jrc
         return phobj;
     }
 
+    const PhysicsObject& Char::get_phobj() const
+    {
+        return phobj;
+    }
+
 
     void Char::init()
     {

@@ -91,6 +91,26 @@ namespace jrc
         puppet = position;
     }
 
+    bool MapMobs::has_mob_in_reach(Rectangle<int16_t> range,
+        Point<int16_t> origin, bool toleft) const {
+
+        // Every rect in the game files is written facing left and is mirrored
+        // when the attacker faces right, exactly as send_attack does it.
+        Rectangle<int16_t> box = toleft
+            ? Rectangle<int16_t>{
+                static_cast<int16_t>(origin.x() + range.l()),
+                static_cast<int16_t>(origin.x() + range.r()),
+                static_cast<int16_t>(origin.y() + range.t()),
+                static_cast<int16_t>(origin.y() + range.b()) }
+            : Rectangle<int16_t>{
+                static_cast<int16_t>(origin.x() - range.r()),
+                static_cast<int16_t>(origin.x() - range.l()),
+                static_cast<int16_t>(origin.y() + range.t()),
+                static_cast<int16_t>(origin.y() + range.b()) };
+
+        return find_touching(box) != 0;
+    }
+
     int32_t MapMobs::find_touching(Rectangle<int16_t> box) const
     {
         for (auto& entry : mobs)
@@ -309,13 +329,28 @@ namespace jrc
     {
         AttackResult result = attack;
         // find_closest returns targets sorted by distance; appending in that
-        // order keeps the sweep running from the attacker outwards.
+        // order keeps the sweep running from the attacker outwards, and it is
+        // also what decides a piercing shot's place in the queue.
+        size_t pierced = 0;
         for (int32_t target : find_closest(range, origin, attack.mobcount))
         {
             if (Optional<Mob> mob = mobs.get(target))
             {
-                result.damagelines.emplace_back(target, mob->calculate_damage(attack));
+                std::vector<std::pair<int32_t, bool>> lines =
+                    mob->calculate_damage(attack);
+
+                const double rate = pierce_damage_rate(attack.skill, pierced);
+                if (rate != 1.0)
+                {
+                    for (auto& line : lines)
+                    {
+                        line.first = static_cast<int32_t>(line.first * rate);
+                    }
+                }
+
+                result.damagelines.emplace_back(target, std::move(lines));
                 result.mobcount++;
+                pierced++;
             }
         }
 

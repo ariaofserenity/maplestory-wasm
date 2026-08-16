@@ -308,6 +308,22 @@ namespace jrc
     // still counts as this much.
     constexpr uint16_t KEYDOWN_MIN_GAUGE = 30;
 
+    // Skills that carry the animations of a charged cast without being one.
+    // v83 fires these on the press and repeats them for as long as the key is
+    // held, like any ordinary skill; the later client this was reversed from
+    // holds them on a gauge instead. Holding one here used to leave the wind-up
+    // looping with nothing ever leaving the bow.
+    inline bool keydown_fires_on_press(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3221001:  // Piercing Arrow
+            return true;
+        default:
+            return false;
+        }
+    }
+
     // How long a skill's tiles hold at full strength before they fade, in ms.
     // The reference client states this per skill where it registers them.
     inline uint16_t tile_hold_time(int32_t skillid)
@@ -351,6 +367,77 @@ namespace jrc
         case 13111002: // Hurricane (Wind Archer)
             return true;
         default:
+            return false;
+        }
+    }
+
+    // What a shot deals to the nth monster it reaches, as a share of what the
+    // skill would otherwise do. The client keeps one table of fifteen rates per
+    // skill - fifteen being the most monsters an attack can list - and scales
+    // every damage line of that target by the entry for its place in the queue.
+    //
+    // Piercing Arrow is the one that matters here and it is the only one that
+    // climbs: the arrow gathers force through each body it passes, so every
+    // monster after the first takes a fifth again as much as the one before.
+    // Past the sixth the table is zero, which is no loss because nothing it can
+    // hit reaches that far.
+    inline double pierce_damage_rate(int32_t skillid, size_t index)
+    {
+        switch (skillid)
+        {
+        case 3221001:  // Piercing Arrow
+        case 33101001:
+        {
+            static constexpr double rates[] = {
+                1.0, 1.2, 1.44, 1.728, 2.0736, 2.48832
+            };
+            return (index < 6) ? rates[index] : 0.0;
+        }
+        default:
+            return 1.0;
+        }
+    }
+
+    // Skills a bow or a crossbow keeps firing even with a monster right on top
+    // of the character. Everything else it can throw is swung instead, because
+    // the reference client tries the melee swing first and looses the arrow
+    // only if that found nothing to hit.
+    //
+    // The list was read out of the reference client's own table, which lives in
+    // a v95 binary and exempts every archer skill there is. v83 is stricter:
+    // the plain single-target shots drop to a swing at point blank the same way
+    // the ordinary attack does, and only the skills below hold their range.
+    // What is left reads consistently - the ground-targeted volleys, the
+    // piercing and long shots, the one that fires continuously, and the two
+    // passives that are never thrown by hand.
+    inline bool shoot_fires_point_blank(int32_t skillid)
+    {
+        switch (skillid)
+        {
+        case 3100001:  // Final Attack : Bow
+        case 3101003:  // Power Knock-Back
+        case 3110001:  // Mortal Blow
+        case 3111004:  // Arrow Rain
+        case 3121003:  // Dragon's Breath
+        case 3121004:  // Hurricane
+        case 3200001:  // Final Attack : Crossbow
+        case 3201003:  // Power Knock-Back (Crossbowman)
+        case 3210001:  // Mortal Blow (Sniper)
+        case 3211004:  // Arrow Eruption
+        case 3221001:  // Piercing Arrow
+        case 3221003:  // Dragon's Breath (Marksman)
+        case 3221007:  // Snipe
+        case 13101002: // Final Attack (Wind Archer)
+        case 13101005: // Storm Break
+        case 13111000: // Arrow Rain (Wind Archer)
+        case 13111002: // Hurricane (Wind Archer)
+        case 13111006: // Wind Piercing
+        case 13111007: // Wind Shot
+            return true;
+        default:
+            // Arrow Blow, Double Shot, Arrow Bomb, Iron Arrow, Strafe, Inferno
+            // and Blizzard are the v83 difference: the v95 table exempts them,
+            // this one does not, so they are swung at point blank.
             return false;
         }
     }
@@ -509,6 +596,14 @@ namespace jrc
         virtual int32_t get_cooldown(int32_t) const
         {
             return 0;
+        }
+
+        // Whether the server expects this move to report a charge time. That
+        // is a property of the skill's own data rather than of how the client
+        // chooses to cast it, so the two are kept apart.
+        virtual bool reports_keydown() const
+        {
+            return false;
         }
 
         virtual bool is_attack() const = 0;

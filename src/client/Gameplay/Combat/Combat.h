@@ -136,13 +136,19 @@ namespace jrc
         };
 
         void apply_attack(const AttackResult& attack);
-        void apply_move(const SpecialMove& move, int32_t charge = 0);
+        // Returns whether the move itself was used. A shot that turns into a
+        // swing at point-blank range reports false: the swing is a plain
+        // attack, so the skill was never spent.
+        bool apply_move(const SpecialMove& move, int32_t charge = 0);
         // Swing a move that deals damage: roll its targets, show its effects and
         // tell the server. Split out because a final attack goes through the
         // same path without being something the player asked for.
         // charge is how long a charging move was held for; zero for everything
         // else, and for the volleys a move looses while still being held.
-        void apply_attack_move(const SpecialMove& move, int32_t charge = 0);
+        bool apply_attack_move(const SpecialMove& move, int32_t charge = 0);
+        // Whether a monster is close enough that a bow should be swung at it
+        // rather than fired.
+        bool monster_within_reach(const SpecialMove& move) const;
         // Roll whether the move that was just swung sets off a follow-up attack.
         void try_register_final_attack(const SpecialMove& move);
         // Run a pending follow-up attack forward one tick.

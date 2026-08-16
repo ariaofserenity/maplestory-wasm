@@ -60,6 +60,10 @@ namespace jrc
         // puppet works by being somewhere the monsters around it would rather
         // walk to, which is why this is set on the mobs rather than on it.
         void set_puppet(bool active, Point<int16_t> position);
+        // Whether any living mob stands inside a box written around an
+        // attacker, the same way an attack's own box is placed.
+        bool has_mob_in_reach(Rectangle<int16_t> range, Point<int16_t> origin,
+            bool toleft) const;
         // Return the id of the first living mob standing inside the box, or
         // zero. Unlike find_colliding this takes the box outright, because a
         // summon has no swept path of its own to build one from.

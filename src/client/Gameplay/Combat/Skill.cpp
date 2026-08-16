@@ -442,12 +442,24 @@ namespace jrc
 
     SpecialMove::CastKind Skill::get_cast_kind() const
     {
+        // A skill that goes off on the press ignores both sets of wind-up
+        // animations it happens to carry.
+        if (keydown_fires_on_press(skillid))
+            return CAST_INSTANT;
+
         const SkillData& data = SkillData::get(skillid);
         if (data.is_keydown())
             return CAST_KEYDOWN;
         if (data.has_prepare())
             return CAST_PREPARE;
         return CAST_INSTANT;
+    }
+
+    bool Skill::reports_keydown() const
+    {
+        // The game files name the skills the server wants a charge time from:
+        // they are the ones with a keydown node, however the client casts them.
+        return SkillData::get(skillid).is_keydown();
     }
 
     uint16_t Skill::get_prepare_time() const

@@ -240,8 +240,10 @@ namespace jrc
             return true;
         }
 
-        apply_move(move);
-        start_cooldown(move);
+        if (apply_move(move))
+        {
+            start_cooldown(move);
+        }
         return true;
     }
 
@@ -277,8 +279,10 @@ namespace jrc
         const SpecialMove& move = get_move(cast.move_id);
         cast = {};
 
-        apply_move(move);
-        start_cooldown(move);
+        if (apply_move(move))
+        {
+            start_cooldown(move);
+        }
         show_cast_effect(move.get_finish_effect());
     }
 
@@ -335,8 +339,10 @@ namespace jrc
             // The wind-up is over, so the skill goes off now.
             int32_t move_id = cast.move_id;
             cast = {};
-            apply_move(move);
-            start_cooldown(move);
+            if (apply_move(move))
+            {
+                start_cooldown(move);
+            }
             show_cast_effect(get_move(move_id).get_finish_effect());
             return;
         }
@@ -355,10 +361,11 @@ namespace jrc
         if (cast.nextshot > 0)
             return;
 
-        if (player.can_use(move) != SpecialMove::FBR_NONE)
+        if (player.can_use(move) != SpecialMove::FBR_NONE || !player.can_shoot())
         {
-            // Out of mp or ammunition part way through: stop charging rather
-            // than firing shots the server will reject.
+            // Out of mp or ammunition part way through, or off the ground with
+            // a bow in hand: stop charging rather than firing shots that should
+            // not be leaving.
             finish_cast();
             return;
         }
@@ -400,11 +407,11 @@ namespace jrc
             cooldowns[move_id] = cooldown;
     }
 
-    void Combat::apply_move(const SpecialMove& move, int32_t charge)
+    bool Combat::apply_move(const SpecialMove& move, int32_t charge)
     {
         if (move.is_attack())
         {
-            apply_attack_move(move, charge);
+            return apply_attack_move(move, charge);
         }
         else if (is_teleport_skill(move.get_id()))
         {
@@ -425,6 +432,8 @@ namespace jrc
 
             send_use_skill(move);
         }
+
+        return true;
     }
 
     void Combat::send_use_skill(const SpecialMove& move)
@@ -441,29 +450,63 @@ namespace jrc
         UseSkillPacket(moveid, level).dispatch();
     }
 
-    void Combat::apply_attack_move(const SpecialMove& move, int32_t charge)
+    bool Combat::apply_attack_move(const SpecialMove& move, int32_t charge)
     {
-        Attack attack = player.prepare_attack(move.is_skill());
+        // A bow brought against a monster is swung, and the swing is a plain
+        // attack and nothing more: the reference client throws the melee with
+        // no skill attached at all and abandons the skill outright once it
+        // connects. Letting the skill through anyway is what had a point-blank
+        // Strafe still loosing an arrow and still charging for it.
+        const bool closerange = monster_within_reach(move);
+        const SpecialMove& swung = closerange ? regularattack : move;
 
-        move.apply_useeffects(player);
-        move.apply_actions(player, attack.type);
+        Attack attack = player.prepare_attack(swung.is_skill(), closerange);
 
-        player.set_afterimage(move.get_id());
+        swung.apply_useeffects(player);
+        swung.apply_actions(player, attack.type);
 
-        move.apply_stats(player, attack);
+        player.set_afterimage(swung.get_id());
+
+        swung.apply_stats(player, attack);
 
         AttackResult result = mobs.send_attack(attack);
         result.attacker = player.get_oid();
-        result.keydown = move.get_cast_kind() == SpecialMove::CAST_KEYDOWN;
+        result.keydown = swung.reports_keydown();
         result.charge = charge;
-        extract_effects(player, move, result);
+        extract_effects(player, swung, result);
 
-        apply_use_movement(move);
-        apply_result_movement(move, result);
+        apply_use_movement(swung);
+        apply_result_movement(swung, result);
 
         AttackPacket(result).dispatch();
 
-        try_register_final_attack(move);
+        try_register_final_attack(swung);
+
+        return !closerange;
+    }
+
+    bool Combat::monster_within_reach(const SpecialMove& move) const
+    {
+        // A skill the client keeps firing at point blank never becomes a swing.
+        if (shoot_fires_point_blank(move.get_id()))
+            return false;
+
+        switch (player.get_stats().get_weapontype())
+        {
+        case Weapon::BOW:
+        case Weapon::CROSSBOW:
+            break;
+        default:
+            return false;
+        }
+
+        // How far the swing reaches is the trail the weapon leaves, which is
+        // the same box a bow already swings when it has nothing to fire.
+        return mobs.has_mob_in_reach(
+            player.get_afterimage().get_range(),
+            player.get_position(),
+            !player.getflip()
+        );
     }
 
     void Combat::try_register_final_attack(const SpecialMove& move)
@@ -1172,7 +1215,14 @@ namespace jrc
                 static_cast<int16_t>(user.get_position().y() - Attack::MUZZLE_HEIGHT)
             };
 
-            const bool connects = mobs.contains(result.first_oid);
+            // Only a shot that hunted through the wedge for one target follows
+            // that target. The reference client hands the bullet a homing
+            // anchor solely on that path; a shot that swept a band leaves the
+            // anchor empty and flies flat to the far end of its reach. An arrow
+            // meant to pass through a row of monsters would otherwise curve
+            // onto the first of them and stop looking like it pierced anything.
+            const bool homes = !shoot_searches_rect(move.get_id());
+            const bool connects = homes && mobs.contains(result.first_oid);
             const Point<int16_t> aim = connects
                 ? mobs.get_mob_body_position(result.first_oid)
                 : muzzle + Point<int16_t>(

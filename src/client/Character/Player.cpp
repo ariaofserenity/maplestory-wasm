@@ -271,7 +271,28 @@ namespace jrc
 
     bool Player::can_attack() const
     {
-        return !attacking && !is_dead() && !is_climbing() && !is_sitting() && look.get_equips().has_weapon();
+        if (attacking || is_dead() || is_climbing() || is_sitting()
+            || !look.get_equips().has_weapon())
+        {
+            return false;
+        }
+
+        return can_shoot();
+    }
+
+    bool Player::can_shoot() const
+    {
+        switch (get_weapontype())
+        {
+        case Weapon::BOW:
+        case Weapon::CROSSBOW:
+            // Swimming counts as footing for this: the reference client only
+            // refuses the shot when the character has no foothold and is not in
+            // the water either.
+            return phobj.onground || is_underwater();
+        default:
+            return true;
+        }
     }
 
     SpecialMove::ForbidReason Player::can_use(const SpecialMove& move) const
@@ -306,7 +327,7 @@ namespace jrc
         return move.can_use(level, weapon, job, hp, mp, bullets);
     }
 
-    Attack Player::prepare_attack(bool skill) const
+    Attack Player::prepare_attack(bool skill, bool closerange) const
     {
         Attack::Type attacktype;
         bool degenerate;
@@ -322,6 +343,12 @@ namespace jrc
             {
             case Weapon::BOW:
             case Weapon::CROSSBOW:
+                // A monster standing on top of an archer is hit with the bow
+                // rather than shot at - the reference client tries the melee
+                // swing first and only looses an arrow if that found nothing.
+                degenerate = closerange || !inventory.has_projectile();
+                attacktype = degenerate ? Attack::CLOSE : Attack::RANGED;
+                break;
             case Weapon::CLAW:
             case Weapon::GUN:
                 degenerate = !inventory.has_projectile();
@@ -355,7 +382,12 @@ namespace jrc
         attack.accuracy    = stats.get_total(Equipstat::ACC);
         attack.playerlevel = stats.get_stat(Maplestat::LEVEL);
         attack.range       = stats.get_range();
-        attack.bullet      = inventory.get_bulletid();
+        // Only a shot carries a projectile. A bow swung at something next to it
+        // - or fired from a crouch, which the client turns into a swing - has
+        // no arrow to draw, and leaving one on sent one flying anyway.
+        attack.bullet      = (attacktype == Attack::RANGED)
+            ? inventory.get_bulletid()
+            : 0;
         attack.origin      = get_position();
         attack.toleft      = !flip;
         attack.speed       = static_cast<uint8_t>(get_integer_attackspeed());
