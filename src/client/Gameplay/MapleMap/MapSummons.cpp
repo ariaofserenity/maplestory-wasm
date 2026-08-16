@@ -114,6 +114,7 @@ namespace jrc
             }
 
             try_attack(summon, player, mobs, combat);
+            try_take_damage(summon, mobs);
         }
 
         for (int32_t oid : gone)
@@ -205,6 +206,43 @@ namespace jrc
         SummonAttackPacket(
             summon.get_oid(), summon.get_position(), attack.toleft, targets
         ).dispatch();
+    }
+
+    void MapSummons::try_take_damage(Summon& summon, MapMobs& mobs)
+    {
+        if (!summon.can_be_hit())
+            return;
+
+        // A decoy is hit by being stood on: the client looks for a monster
+        // whose body overlaps its own rather than for one that swung at it.
+        const int32_t oid = mobs.find_touching(summon.get_body_rect());
+        if (oid == 0)
+            return;
+
+        MobAttack touch = mobs.create_attack(oid);
+        if (!touch)
+        {
+            // A monster with no touch damage walks over a decoy harmlessly.
+            return;
+        }
+
+        summon.take_damage(touch.watk);
+        DamageSummonPacket(summon.get_oid(), touch.watk, touch.mobid).dispatch();
+    }
+
+    bool MapSummons::get_decoy_position(int32_t owner, Point<int16_t>& position) const
+    {
+        for (auto& entry : summons)
+        {
+            const Summon& summon = static_cast<const Summon&>(*entry.second);
+            if (summon.get_owner() == owner && summon.is_decoy()
+                && !summon.is_expired())
+            {
+                position = summon.get_position();
+                return true;
+            }
+        }
+        return false;
     }
 
     void MapSummons::spawn(int32_t oid, int32_t owner, int32_t skillid,

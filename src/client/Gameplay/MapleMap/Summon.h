@@ -4,6 +4,7 @@
 #include "../Combat/Attack.h"
 
 #include "../../Graphics/Animation.h"
+#include "../../Graphics/Geometry.h"
 #include "../../Template/Rectangle.h"
 
 #include "nlnx/node.hpp"
@@ -61,6 +62,18 @@ namespace jrc
         // Start the death animation. The summon is dropped once it finishes,
         // or at once when it has no animation to play.
         void kill(bool animated);
+
+        // Whether the summon soaks attacks on its owner's behalf. Only one kind
+        // of summon does, and the game files say which: it is the one given a
+        // hit animation, because it is the only one that ever gets hit.
+        bool is_decoy() const;
+        // Whether it is due to take another hit. A decoy is briefly untouchable
+        // after each one, or a monster standing on it would empty it in a tick.
+        bool can_be_hit() const;
+        // Take a hit. The summon dies once its health is gone.
+        void take_damage(int32_t damage);
+        // The box a monster has to be standing in to be hitting it.
+        Rectangle<int16_t> get_body_rect() const;
 
         // Whether the summon has finished dying and can be dropped.
         bool is_expired() const;
@@ -141,6 +154,17 @@ namespace jrc
         // wandering circle rather than a rigid tether.
         Point<int16_t> flytarget;
         bool hasflytarget;
+
+        // What the summon can soak before it goes, what it started with, and
+        // how long it has left to stand there at all. All from the level data.
+        int32_t hp;
+        int32_t maxhp;
+        int32_t lifetime;
+        // Shown over a decoy for as long as it is standing, so its owner can
+        // see how much of it is left rather than guessing.
+        MobHpBar hpbar;
+        // Time left before it may be hit again, in ms.
+        int32_t hitperiod;
 
         // Time left before this summon may swing again, in ms.
         int32_t attackcooldown;

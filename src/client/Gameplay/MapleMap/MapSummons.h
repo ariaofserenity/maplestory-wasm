@@ -41,11 +41,17 @@ namespace jrc
         void show_attack(int32_t owner, int32_t oid);
         void show_hit(int32_t owner, int32_t oid);
 
+        // Where the player's own decoy is standing, if they have one out. The
+        // mobs need it so they know what to walk to.
+        bool get_decoy_position(int32_t owner, Point<int16_t>& position) const;
+
     private:
         // Look for something for one of the player's summons to hit, and swing
         // at it if there is.
         void try_attack(Summon& summon, const Player& player, MapMobs& mobs,
             Combat& combat);
+        // Let a monster standing on one of the player's decoys hurt it.
+        void try_take_damage(Summon& summon, MapMobs& mobs);
 
         MapObjects summons;
         // Time since the player's summons last reported where they are, in ms.

@@ -20,6 +20,10 @@ namespace jrc
         // states it and the reference client works from a level data field the
         // v83 skills do not carry, so it is tuned to the hit reaction's length.
         constexpr uint16_t KNOCKBACK_TIME = 170;
+
+        // How far off a flying mob's height its target has to be before it
+        // bothers climbing or dropping towards it.
+        constexpr int16_t FLY_AGGRO_SLACK = 30;
     }
 
     Mob::Mob(int32_t        oid,
@@ -418,8 +422,36 @@ namespace jrc
         return phobj.fhlayer;
     }
 
+    void Mob::aggro_to(Point<int16_t> target)
+    {
+        aggrotarget = target;
+        hasaggrotarget = true;
+    }
+
+    void Mob::clear_aggro()
+    {
+        hasaggrotarget = false;
+    }
+
     void Mob::next_move()
     {
+        // Something worth walking to overrides the wander entirely: the mob
+        // heads for it and keeps heading for it until it is gone.
+        if (canmove && hasaggrotarget)
+        {
+            set_stance(MOVE);
+            flip = aggrotarget.x() > get_position().x();
+
+            if (canfly)
+            {
+                int16_t gapy = aggrotarget.y() - get_position().y();
+                flydirection = (gapy < -FLY_AGGRO_SLACK) ? UPWARDS
+                    : (gapy > FLY_AGGRO_SLACK) ? DOWNWARDS
+                    : STRAIGHT;
+            }
+            return;
+        }
+
         if (canmove)
         {
             switch (stance)

@@ -26,6 +26,14 @@
 
 namespace jrc
 {
+    namespace
+    {
+        // How close a monster has to be to a puppet before it walks to it. The
+        // server uses the same reach to decide which monsters it has to nudge
+        // the client about, so the two agree on which are under its pull.
+        constexpr int32_t PUPPET_AGGRO_RANGE = 421;
+    }
+
     void MapMobs::draw(Layer::Id layer, double viewx, double viewy, float alpha) const
     {
         mobs.draw(layer, viewx, viewy, alpha);
@@ -54,7 +62,46 @@ namespace jrc
             }
         }
 
+        // A puppet pulls in whatever is close enough to notice it. Only the
+        // mobs this client drives can be told where to go; everybody else's are
+        // moved by whoever controls them.
+        for (auto& entry : mobs)
+        {
+            Optional<Mob> mob = entry.second.get();
+            if (!mob)
+                continue;
+
+            if (haspuppet
+                && (puppet - mob->get_position()).length() <= PUPPET_AGGRO_RANGE)
+            {
+                mob->aggro_to(puppet);
+            }
+            else
+            {
+                mob->clear_aggro();
+            }
+        }
+
         mobs.update(physics);
+    }
+
+    void MapMobs::set_puppet(bool active, Point<int16_t> position)
+    {
+        haspuppet = active;
+        puppet = position;
+    }
+
+    int32_t MapMobs::find_touching(Rectangle<int16_t> box) const
+    {
+        for (auto& entry : mobs)
+        {
+            Optional<const Mob> mob = entry.second.get();
+            if (mob && mob->is_alive() && mob->is_in_range(box))
+            {
+                return entry.first;
+            }
+        }
+        return 0;
     }
 
     void MapMobs::spawn(MobSpawn&& spawn)

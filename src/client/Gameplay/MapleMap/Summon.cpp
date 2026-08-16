@@ -43,6 +43,17 @@ namespace jrc
         // distance is the one this client already recalls its flying pets at.
         constexpr int32_t FLY_RECALL_DISTANCE = 250;
 
+        // How far above its head a decoy's health bar sits. The bar is drawn
+        // from the same head point a monster's is, and a puppet stands taller
+        // than the gap that leaves, so it needs lifting clear of the sprite.
+        constexpr int16_t HP_BAR_LIFT = 48;
+
+        // How long a decoy is untouchable for after taking a hit, in ms. The
+        // reference client counts a hit period down on the summon itself but
+        // states its length elsewhere, so this is the window this client
+        // already makes a struck character invulnerable for.
+        constexpr int32_t HIT_PERIOD = 2000;
+
         // The shortest gap between two of a summon's attacks, in ms. The
         // reference client states this per skill and gives every summon that is
         // not an octopus this same figure - which is the whole reason a hawk
@@ -100,6 +111,16 @@ namespace jrc
         }
         attackinfo = src["attack1"]["info"];
 
+        // A decoy's health and how long it stands there are the skill's own x
+        // and duration - "summons an HP 1800 puppet for 30 sec" is those two
+        // fields and nothing else.
+        const SkillData::Stats& stats =
+            SkillData::get(skillid).get_stats(skilllevel);
+        hp = stats.x;
+        maxhp = hp;
+        lifetime = stats.duration;
+        hitperiod = 0;
+
         stance = has_stance(SUMMONED) ? SUMMONED : resting_stance();
         reported = position;
         hasflytarget = false;
@@ -154,9 +175,23 @@ namespace jrc
         Point<int16_t> absp = phobj.get_absolute(viewx, viewy, alpha);
 
         auto iter = animations.find(stance);
-        if (iter != animations.end())
+        if (iter == animations.end())
+            return;
+
+        iter->second.draw(DrawArgument(absp, flip), alpha);
+
+        // A decoy carries its health openly, the whole time it is up rather
+        // than only just after it is struck: the point of putting one down is
+        // knowing how much longer it will hold.
+        if (is_decoy() && !dying && maxhp > 0)
         {
-            iter->second.draw(DrawArgument(absp, flip), alpha);
+            Point<int16_t> head = iter->second.get_head();
+            head = { static_cast<int16_t>(absp.x() + (flip ? -head.x() : head.x())),
+                     static_cast<int16_t>(absp.y() + head.y() - HP_BAR_LIFT) };
+
+            hpbar.draw(head, static_cast<int16_t>(
+                std::max<int32_t>(hp, 0) * 100 / maxhp
+            ));
         }
     }
 
@@ -169,6 +204,19 @@ namespace jrc
 
         if (attackcooldown > 0)
             attackcooldown -= Constants::TIMESTEP;
+
+        if (hitperiod > 0)
+            hitperiod -= Constants::TIMESTEP;
+
+        // A summon states how long it lasts and simply stops when that is up.
+        // The server ends the buff on its own clock and takes the summon away
+        // with it, so this only keeps the two from drifting apart on screen.
+        if (!dying && lifetime > 0)
+        {
+            lifetime -= Constants::TIMESTEP;
+            if (lifetime <= 0)
+                kill(true);
+        }
 
         if (dying)
         {
@@ -317,6 +365,44 @@ namespace jrc
         {
             expired = true;
         }
+    }
+
+    bool Summon::is_decoy() const
+    {
+        return has_stance(HIT);
+    }
+
+    bool Summon::can_be_hit() const
+    {
+        return is_decoy() && !dying && hitperiod <= 0;
+    }
+
+    void Summon::take_damage(int32_t damage)
+    {
+        if (!is_decoy() || dying)
+            return;
+
+        hp -= damage;
+        hitperiod = HIT_PERIOD;
+
+        if (hp <= 0)
+        {
+            kill(true);
+            return;
+        }
+
+        show_hit();
+    }
+
+    Rectangle<int16_t> Summon::get_body_rect() const
+    {
+        auto iter = animations.find(stance);
+        if (iter == animations.end())
+            return {};
+
+        Rectangle<int16_t> bounds = iter->second.get_bounds();
+        bounds.shift(get_position());
+        return bounds;
     }
 
     bool Summon::is_expired() const

@@ -31,6 +31,26 @@ namespace jrc
     };
 
 
+    // Reports a hit one of the player's summons soaked on their behalf. The
+    // server subtracts it from the summon's own health and ends the buff once
+    // that runs out, which is what takes the summon off everyone's screen.
+    // Opcode: DAMAGE_SUMMON(177)
+    class DamageSummonPacket : public OutPacket
+    {
+    public:
+        DamageSummonPacket(int32_t oid, int32_t damage, int32_t mobid)
+            : OutPacket(DAMAGE_SUMMON) {
+
+            write_int(oid);
+            // The attack index the hit came from. Walking into a summon is not
+            // one of the monster's numbered attacks, so it is reported as none.
+            write_byte(-1);
+            write_int(damage);
+            write_int(mobid);
+        }
+    };
+
+
     // Reports a swing one of the player's summons made and what it did.
     // Opcode: SUMMON_ATTACK(176)
     class SummonAttackPacket : public OutPacket

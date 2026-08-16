@@ -167,6 +167,13 @@ namespace jrc
         tilesobjs.update();
 
         reactors.update(physics);
+
+        // Whatever the player has standing in for them is what the monsters are
+        // drawn to, so the mobs have to be told about it before they decide
+        // where to walk.
+        Point<int16_t> decoy;
+        mobs.set_puppet(summons.get_decoy_position(player.get_oid(), decoy), decoy);
+
         npcs.update(physics);
         mobs.update(physics);
         chars.update(physics);

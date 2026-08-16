@@ -56,6 +56,15 @@ namespace jrc
         void apply_damage(int32_t oid, int32_t damage, bool toleft,
             const AttackUser& user, const SpecialMove& move);
 
+        // Point the mobs this client controls at a puppet, or at nothing. A
+        // puppet works by being somewhere the monsters around it would rather
+        // walk to, which is why this is set on the mobs rather than on it.
+        void set_puppet(bool active, Point<int16_t> position);
+        // Return the id of the first living mob standing inside the box, or
+        // zero. Unlike find_colliding this takes the box outright, because a
+        // summon has no swept path of its own to build one from.
+        int32_t find_touching(Rectangle<int16_t> box) const;
+
         // Check if the mob with the specified oid exists.
         bool contains(int32_t oid) const;
         // Return the id of the first mob who collides with the object.
@@ -80,5 +89,9 @@ namespace jrc
         MapObjects mobs;
 
         std::queue<MobSpawn> spawns;
+
+        // Where the player's puppet is standing, if they have one out.
+        Point<int16_t> puppet;
+        bool haspuppet = false;
     };
 }

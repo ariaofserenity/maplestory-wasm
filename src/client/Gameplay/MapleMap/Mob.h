@@ -87,6 +87,13 @@ namespace jrc
         /// Create a touch damage attack to the player.
         MobAttack create_touch_attack() const;
 
+        /// Steer this mob towards a point rather than letting it wander. A
+        /// puppet works by being something the monsters around it would rather
+        /// walk to than the character who put it there.
+        void aggro_to(Point<int16_t> target);
+        /// Let the mob go back to wandering.
+        void clear_aggro();
+
         /// Check if this mob collides with the specified rectangle.
         bool is_in_range(const Rectangle<int16_t>& range) const;
         /// Check if this mob is still alive.
@@ -176,6 +183,9 @@ namespace jrc
         bool awaitdeath;
         bool control;
         bool aggro;
+        /// Where this mob would rather be, and whether it has anywhere to be.
+        Point<int16_t> aggrotarget;
+        bool hasaggrotarget = false;
         Stance stance;
         bool flip;
         FlyDirection flydirection;
