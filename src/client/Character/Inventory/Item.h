@@ -26,6 +26,9 @@ namespace jrc
     public:
         Item(int32_t itemid, int64_t expiration, const std::string& owner, int16_t flags);
 
+        // Return the item's expiration as the filetime the server sent.
+        int64_t get_expiration() const;
+
     private:
         int32_t item_id;
         int64_t expiration;

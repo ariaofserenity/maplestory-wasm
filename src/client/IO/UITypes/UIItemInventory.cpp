@@ -21,12 +21,16 @@
 #include "../Components/MapleButton.h"
 #include "../Components/TwoSpriteButton.h"
 #include "UIKeyConfig.h"
+#include "UINotice.h"
 
+#include "../../Audio/Audio.h"
 #include "../../Data/ItemData.h"
 #include "../../Net/Packets/InventoryPackets.h"
 #include "../../Util/Misc.h"
 
 #include "nlnx/nx.hpp"
+
+#include <algorithm>
 
 namespace jrc
 {
@@ -41,6 +45,7 @@ namespace jrc
 
         newitemslot = src["New"]["inventory"];
         newitemtab = src["New"]["Tab0"];
+        newitemcurrenttab = src["New"]["Tab1"];
         projectile = src["activeIcon"];
 
         nl::node taben = src["Tab"]["enabled"];
@@ -121,10 +126,13 @@ namespace jrc
             newitemslot.draw({ newslotpos }, alpha);
         }
 
-        if (newtab != tab && newtab != InventoryType::NONE)
+        if (newtab != InventoryType::NONE)
         {
+            // The tab the item landed in is marked either way; the open tab
+            // just gets the quieter of the two animations.
             Point<int16_t> newtabpos = position + get_tabpos(newtab);
-            newitemtab.draw({ newtabpos }, alpha);
+            const Animation& tabeffect = (newtab == tab) ? newitemcurrenttab : newitemtab;
+            tabeffect.draw({ newtabpos }, alpha);
         }
 
         Point<int16_t> mesopos = position + Point<int16_t>(124, 264);
@@ -136,6 +144,7 @@ namespace jrc
         UIElement::update();
 
         newitemtab.update(6);
+        newitemcurrenttab.update(6);
         newitemslot.update(6);
 
         int64_t meso = inventory.get_meso();
@@ -161,7 +170,7 @@ namespace jrc
             const Texture& texture = ItemData::get(item_id).get_icon(false);
             Equipslot::Id eqslot = inventory.find_equipslot(item_id);
             icons[slot] = std::make_unique<Icon>(
-                std::make_unique<ItemIcon>(tab, eqslot, slot, item_id),
+                std::make_unique<ItemIcon>(tab, eqslot, slot, item_id, count, is_splittable(slot)),
                 texture,
                 count
                 );
@@ -170,6 +179,22 @@ namespace jrc
         {
             icons.erase(slot);
         }
+    }
+
+    bool UIItemInventory::is_splittable(int16_t slot) const
+    {
+        // Only the three plain bundle tabs hold stacks that can be broken up.
+        if (tab != InventoryType::USE && tab != InventoryType::SETUP && tab != InventoryType::ETC)
+            return false;
+
+        // Throwing stars and bullets are recharged rather than stacked, so
+        // they leave the inventory as one item however many rounds are left.
+        int32_t item_id = inventory.get_item_id(tab, slot);
+        int32_t prefix = item_id / 10000;
+        if (prefix == 207 || prefix == 233)
+            return false;
+
+        return inventory.is_permanent(tab, slot);
     }
 
     void UIItemInventory::load_icons()
@@ -209,6 +234,10 @@ namespace jrc
         case BT_SORT:
             SortItemsPacket(tab).dispatch();
             break;
+        case BT_DROPMESO:
+            drop_mesos();
+            // Only the tabs stay latched; this one pops back out.
+            return Button::NORMAL;
         }
 
         if (tab != oldtab)
@@ -236,6 +265,7 @@ namespace jrc
                 switch (tab)
                 {
                 case InventoryType::EQUIP:
+                    Sound(Sound::DRAGEND).play();
                     EquipItemPacket(
                         slot,
                         inventory.find_equipslot(item_id)
@@ -307,6 +337,7 @@ namespace jrc
                 Point<int16_t> slotpos = get_slotpos(slot);
                 icon->start_drag(cursor_relative - slotpos);
                 UI::get().drag_icon(icon);
+                Sound(Sound::DRAGSTART).play();
 
                 clear_tooltip();
                 return { Cursor::GRABBING, true };
@@ -361,8 +392,18 @@ namespace jrc
             newtab = type;
             newslot = slot;
             break;
-        case Inventory::CHANGECOUNT:
         case Inventory::SWAP:
+            // The item did not leave the inventory, so the mark follows it
+            // into whichever of the two slots it ended up in.
+            if (newtab == type)
+            {
+                if (newslot == slot)
+                    newslot = arg;
+                else if (newslot == arg)
+                    newslot = slot;
+            }
+            break;
+        case Inventory::CHANGECOUNT:
         case Inventory::REMOVE:
             if (newslot == slot && newtab == type)
             {
@@ -371,6 +412,37 @@ namespace jrc
             }
             break;
         }
+    }
+
+    void UIItemInventory::refresh(InventoryType::Id type, int16_t slot)
+    {
+        if (slot > 0 && type == tab)
+        {
+            update_slot(slot);
+        }
+    }
+
+    void UIItemInventory::drop_mesos()
+    {
+        int64_t owned = inventory.get_meso();
+        if (owned < DropMesosPacket::MIN)
+            return;
+
+        int32_t most = static_cast<int32_t>(
+            std::min<int64_t>(owned, DropMesosPacket::MAX)
+            );
+
+        auto onenter = [](int32_t amount) {
+            DropMesosPacket(amount).dispatch();
+        };
+
+        UI::get().emplace<UIEnterNumber>(
+            "How many mesos would you like to drop?",
+            onenter,
+            DropMesosPacket::MIN,
+            most,
+            DropMesosPacket::MIN
+            );
     }
 
     void UIItemInventory::enable_sort()
@@ -465,9 +537,11 @@ namespace jrc
             return Point<int16_t>(10, 28);
         case InventoryType::USE:
             return Point<int16_t>(42, 28);
-        case InventoryType::SETUP:
-            return Point<int16_t>(74, 28);
+        // Etc sits third and Set-up fourth, matching the order the tab
+        // graphics are laid out in and the order the original client uses.
         case InventoryType::ETC:
+            return Point<int16_t>(74, 28);
+        case InventoryType::SETUP:
             return Point<int16_t>(105, 28);
         case InventoryType::CASH:
             return Point<int16_t>(138, 28);
@@ -507,16 +581,38 @@ namespace jrc
     }
 
 
-    UIItemInventory::ItemIcon::ItemIcon(InventoryType::Id st, Equipslot::Id eqs, int16_t s, int32_t id)
-    {
+    UIItemInventory::ItemIcon::ItemIcon(InventoryType::Id st, Equipslot::Id eqs, int16_t s,
+        int32_t id, int16_t c, bool sp) {
+
         sourcetab = st;
         eqsource = eqs;
         source = s;
         item_id = id;
+        count = c;
+        splittable = sp;
+    }
+
+    void UIItemInventory::ItemIcon::set_count(int16_t c)
+    {
+        count = c;
     }
 
     void UIItemInventory::ItemIcon::drop_on_stage() const
     {
+        if (splittable && count > 1)
+        {
+            InventoryType::Id tab = sourcetab;
+            int16_t slot = source;
+            auto onenter = [tab, slot](int32_t quantity) {
+                MoveItemPacket(tab, slot, 0, static_cast<int16_t>(quantity)).dispatch();
+            };
+
+            UI::get().emplace<UIEnterNumber>(
+                "How many will you drop?", onenter, 1, count, count
+                );
+            return;
+        }
+
         MoveItemPacket(sourcetab, source, 0, 1).dispatch();
     }
 
@@ -527,10 +623,12 @@ namespace jrc
         case InventoryType::EQUIP:
             if (eqsource == eqslot)
             {
+                Sound(Sound::DRAGEND).play();
                 EquipItemPacket(source, eqslot).dispatch();
             }
             break;
         case InventoryType::USE:
+            Sound(Sound::DRAGEND).play();
             ScrollEquipPacket(source, eqslot).dispatch();
             break;
         default:
@@ -543,6 +641,7 @@ namespace jrc
         if (tab != sourcetab || slot == source)
             return;
 
+        Sound(Sound::DRAGEND).play();
         MoveItemPacket(tab, source, slot, 1).dispatch();
     }
 

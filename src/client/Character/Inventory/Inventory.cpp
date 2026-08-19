@@ -357,6 +357,24 @@ namespace jrc
         }
     }
 
+    bool Inventory::is_permanent(InventoryType::Id type, int16_t slot) const
+    {
+        // The server hands out this filetime (2079-01-01) for anything that
+        // does not run out, which is the same sentinel the original client
+        // compares against before it offers to split a stack.
+        constexpr int64_t NO_EXPIRATION = 150842304000000000LL;
+
+        auto slot_iter = inventories[type].find(slot);
+        if (slot_iter == inventories[type].end())
+            return true;
+
+        auto item_iter = items.find(slot_iter->second.unique_id);
+        if (item_iter == items.end())
+            return true;
+
+        return item_iter->second.get_expiration() >= NO_EXPIRATION;
+    }
+
     Optional<const Equip> Inventory::get_equip(InventoryType::Id type, int16_t slot) const
     {
         if (type != InventoryType::EQUIPPED && type != InventoryType::EQUIP)

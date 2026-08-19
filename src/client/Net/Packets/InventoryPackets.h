@@ -85,6 +85,24 @@ namespace jrc
     };
 
 
+    // Packet which requests that an amount of mesos is dropped on the floor.
+    // The server only spawns a meso drop for amounts between MIN and MAX, so
+    // the amount has to be clamped before it is sent.
+    // Opcode: DROP_MESO(94)
+    class DropMesosPacket : public OutPacket
+    {
+    public:
+        static constexpr int32_t MIN = 10;
+        static constexpr int32_t MAX = 50000;
+
+        DropMesosPacket(int32_t amount) : OutPacket(DROP_MESO)
+        {
+            write_time();
+            write_int(amount);
+        }
+    };
+
+
     // A packet which requests that an 'USE' item is used.
     // Opcode: USE_ITEM(72)
     class UseItemPacket : public OutPacket

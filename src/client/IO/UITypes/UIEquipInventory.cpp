@@ -20,6 +20,7 @@
 #include "../UI.h"
 #include "../Components/MapleButton.h"
 
+#include "../../Audio/Audio.h"
 #include "../../Data/ItemData.h"
 #include "../../Net/Packets/InventoryPackets.h"
 
@@ -150,6 +151,7 @@ namespace jrc
             {
                 icon->start_drag(cursorpos - position - iconpositions[slot]);
                 UI::get().drag_icon(icon);
+                Sound(Sound::DRAGSTART).play();
 
                 clear_tooltip();
                 return { Cursor::GRABBING, true };
@@ -172,6 +174,7 @@ namespace jrc
         {
             if (int16_t freeslot = inventory.find_free_slot(InventoryType::EQUIP))
             {
+                Sound(Sound::DRAGEND).play();
                 UnequipItemPacket(slot, freeslot).dispatch();
             }
         }
@@ -262,12 +265,14 @@ namespace jrc
         {
             if (eqslot == source)
             {
+                Sound(Sound::DRAGEND).play();
                 EquipItemPacket(slot, eqslot)
                     .dispatch();
             }
         }
         else
         {
+            Sound(Sound::DRAGEND).play();
             UnequipItemPacket(source, slot)
                 .dispatch();
         }

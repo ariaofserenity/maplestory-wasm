@@ -47,6 +47,9 @@ namespace jrc
         void send_key(int32_t keycode, bool pressed, bool escape) override;
 
         void modify(InventoryType::Id type, int16_t pos, int8_t mode, int16_t arg);
+        // Redraw a slot without treating its new contents as a freshly gained
+        // item. Used for the slots an equip moves through when it is taken off.
+        void refresh(InventoryType::Id type, int16_t pos);
         void enable_sort();
         void enable_gather();
 
@@ -55,9 +58,11 @@ namespace jrc
 
     private:
         void show_item(int16_t slot);
+        void drop_mesos();
         void clear_tooltip();
         void load_icons();
         void update_slot(int16_t slot);
+        bool is_splittable(int16_t slot) const;
         bool is_visible(int16_t slot) const;
         bool is_not_visible(int16_t slot) const;
         int16_t slot_by_position(Point<int16_t> position) const;
@@ -69,19 +74,25 @@ namespace jrc
         class ItemIcon : public Icon::Type
         {
         public:
-            ItemIcon(InventoryType::Id sourcetab, Equipslot::Id eqsource, int16_t source, int32_t itemid);
+            ItemIcon(InventoryType::Id sourcetab, Equipslot::Id eqsource, int16_t source,
+                int32_t itemid, int16_t count, bool splittable);
 
             void drop_on_stage() const override;
             void drop_on_equips(Equipslot::Id eqslot) const override;
             void drop_on_items(InventoryType::Id tab, Equipslot::Id, int16_t slot, bool) const override;
             void drop_on_bindings(Point<int16_t> cursorposition, bool remove) const override;
             Keyboard::Mapping get_binding() const override;
+            void set_count(int16_t count) override;
 
         private:
             InventoryType::Id sourcetab;
             Equipslot::Id eqsource;
             int16_t source;
             int32_t item_id;
+            int16_t count;
+            // Whether the stack can be dropped in parts. Equips, cash items,
+            // rechargeables and anything that expires always go out whole.
+            bool splittable;
         };
 
         enum Buttons
@@ -106,6 +117,7 @@ namespace jrc
 
         Animation newitemslot;
         Animation newitemtab;
+        Animation newitemcurrenttab;
         Texture projectile;
         Text mesolabel;
         Slider slider;

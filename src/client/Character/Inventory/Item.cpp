@@ -21,4 +21,9 @@ namespace jrc
 {
     Item::Item(int32_t item_id, int64_t expiration, const std::string& owner, int16_t flags)
         : item_id(item_id), expiration(expiration), owner(owner), flags(flags) {}
+
+    int64_t Item::get_expiration() const
+    {
+        return expiration;
+    }
 }

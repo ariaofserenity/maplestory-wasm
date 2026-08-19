@@ -37,6 +37,8 @@ namespace jrc
             BUTTONCLICK,
             BUTTONOVER,
             DLGNOTICE,
+            DRAGSTART,
+            DRAGEND,
 
             // Login
             SELECTCHAR,

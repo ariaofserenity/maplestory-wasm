@@ -107,6 +107,9 @@ namespace jrc
         int16_t get_item_count(InventoryType::Id type, int16_t slot) const;
         // Return the id of an item. Returns 0 if the slot is empty.
         int32_t get_item_id(InventoryType::Id type, int16_t slot) const;
+        // Return whether the item in a slot never expires. Slots holding an
+        // equip, a pet or nothing at all count as permanent.
+        bool is_permanent(InventoryType::Id type, int16_t slot) const;
 
         // Return a pointer to an equip.
         Optional<const Equip> get_equip(InventoryType::Id type, int16_t slot) const;

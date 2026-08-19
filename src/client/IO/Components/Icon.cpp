@@ -100,6 +100,7 @@ namespace jrc
     void Icon::set_count(int16_t c)
     {
         count = c;
+        type->set_count(c);
     }
 
     int16_t Icon::get_count() const

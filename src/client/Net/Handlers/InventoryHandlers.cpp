@@ -168,7 +168,10 @@ namespace jrc
 
                     if (itinvent)
                     {
-                        itinvent->modify(InventoryType::EQUIP, mod.arg, 0, 0);
+                        // Taking a piece of gear off is not a gain: the
+                        // player already had it, so the slot is only
+                        // redrawn and no new-item marker is raised.
+                        itinvent->refresh(InventoryType::EQUIP, mod.arg);
                     }
 
                     Stage::get().get_player().change_equip(-mod.pos);
