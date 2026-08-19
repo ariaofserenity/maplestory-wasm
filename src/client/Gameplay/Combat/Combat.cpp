@@ -742,7 +742,7 @@ namespace jrc
             // map position rather than an offset from the caster.
             movingeffects.emplace_back(
                 effect.animation, effect.origin, effect.travel,
-                effect.duration, effect.flip
+                effect.duration, effect.flip, effect.alpha
             );
             return;
         }
@@ -997,19 +997,23 @@ namespace jrc
             int16_t boxh = box.height();
             const int32_t step = std::max<int32_t>(area.interval, 1);
 
-            // The tiles cover the same stretch of ground the arrows came down
-            // over. They use the box before it is lifted: the lift exists to
-            // start the copies above the area they fall into, and searching for
-            // ground inside a box that has been raised off it finds none.
-            lay_tiles(
-                user, area,
-                Rectangle<int16_t>{
-                    box.l(), box.r(),
-                    static_cast<int16_t>(at.y() + area.spawnbox.t()),
-                    static_cast<int16_t>(at.y() + area.spawnbox.b())
-                },
-                hit_delay, !result.toleft
-            );
+            // A falling emitter lights the ground copy by copy, above, so only
+            // the kinds that drop nothing lay a row across the area instead.
+            // The row uses the box before it is lifted: the lift exists to
+            // start copies above the area they fall into, and searching for
+            // ground inside a box raised off it finds none.
+            if (area.kind != SpecialMove::EMIT_FALLING)
+            {
+                lay_tiles(
+                    user, area,
+                    Rectangle<int16_t>{
+                        box.l(), box.r(),
+                        static_cast<int16_t>(at.y() + area.spawnbox.t()),
+                        static_cast<int16_t>(at.y() + area.spawnbox.b())
+                    },
+                    hit_delay, !result.toleft
+                );
+            }
 
             if (area.kind == SpecialMove::EMIT_FALLING)
             {
@@ -1058,8 +1062,37 @@ namespace jrc
                             Animation{ variant }, from,
                             Point<int16_t>{ reachx, static_cast<int16_t>(dy) },
                             static_cast<uint16_t>(fall), uint16_t{ 0 },
-                            static_cast<int8_t>(variant["z"]), !result.toleft, true
+                            static_cast<int8_t>(variant["z"]), area.alpha,
+                            !result.toleft, true
                         );
+
+                        // The ground is lit by the copies reaching it, so each
+                        // one leaves its own tile where it comes down and at
+                        // the moment it does. A copy travelling upwards never
+                        // touches the floor and leaves nothing.
+                        if (!area.tiles.empty() && area.lifetime > 0 && dy > 0)
+                        {
+                            const int16_t landx =
+                                static_cast<int16_t>(from.x() + reachx);
+                            const int16_t ground = physics.get_y_below(
+                                Point<int16_t>(landx, from.y())
+                            ).y();
+
+                            nl::node tile = area.tiles[
+                                randomizer.next_int<size_t>(area.tiles.size())
+                            ];
+
+                            specialeffects.emplace(
+                                static_cast<uint16_t>(tick + fall),
+                                user.get_oid(), Animation{ tile },
+                                Point<int16_t>(landx, static_cast<int16_t>(
+                                    ground + randomizer.next_int<int32_t>(5) - 2
+                                )),
+                                Point<int16_t>{ 0, 0 }, uint16_t{ 0 },
+                                area.lifetime, int8_t{ 0 }, int16_t{ 0 },
+                                !result.toleft, true
+                            );
+                        }
                     }
                 }
             }
@@ -1104,7 +1137,8 @@ namespace jrc
                             static_cast<uint16_t>(tick), user.get_oid(),
                             Animation{ variant }, from,
                             Point<int16_t>{ 0, 0 }, uint16_t{ 0 }, uint16_t{ 0 },
-                            static_cast<int8_t>(variant["z"]), !result.toleft, true
+                            static_cast<int8_t>(variant["z"]), int16_t{ 0 },
+                            !result.toleft, true
                         );
                     }
                 }
@@ -1115,26 +1149,10 @@ namespace jrc
                     hit_delay, user.get_oid(), Animation{ area.special },
                     at - user.get_position(),
                     Point<int16_t>{ 0, 0 }, uint16_t{ 0 }, uint16_t{ 0 },
-                    static_cast<int8_t>(area.special["z"]), !result.toleft, false
+                    static_cast<int8_t>(area.special["z"]), int16_t{ 0 },
+                    !result.toleft, false
                 );
             }
-        }
-
-        // A skill whose emitter never ran still lays its tiles - a skill may
-        // carry a tile without carrying a special at all. It has no box of its
-        // own to fill, so the row is laid over where the move landed.
-        if (anchors.empty() || area.kind == SpecialMove::EMIT_NONE)
-        {
-            lay_tiles(
-                user, area,
-                Rectangle<int16_t>{
-                    static_cast<int16_t>(anchor.x() + area.spawnbox.l()),
-                    static_cast<int16_t>(anchor.x() + area.spawnbox.r()),
-                    static_cast<int16_t>(anchor.y() + area.spawnbox.t()),
-                    static_cast<int16_t>(anchor.y() + area.spawnbox.b())
-                },
-                hit_delay, !result.toleft
-            );
         }
 
         // A skill that draws no projectile of its own still arms itself with an
@@ -1342,7 +1360,7 @@ namespace jrc
                     static_cast<int16_t>(ground + randomizer.next_int<int32_t>(5) - 2)
                 ),
                 Point<int16_t>{ 0, 0 }, uint16_t{ 0 },
-                area.lifetime, int8_t{ 0 }, flip, true
+                area.lifetime, int8_t{ 0 }, int16_t{ 0 }, flip, true
             );
         }
     }

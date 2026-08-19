@@ -31,8 +31,10 @@ namespace jrc
     class MovingEffect
     {
     public:
+        // alpha is the opacity the skill states for its copies, out of 255, or
+        // zero when it states none and one has to be rolled.
         MovingEffect(Animation animation, Point<int16_t> origin,
-            Point<int16_t> travel, uint16_t duration, bool flip);
+            Point<int16_t> travel, uint16_t duration, bool flip, int16_t alpha);
 
         void draw(double viewx, double viewy, float alpha) const;
         // Advance one tick. Returns true once the copy has landed.
@@ -47,6 +49,8 @@ namespace jrc
         Point<int16_t> travel;
         int32_t duration;
         int32_t elapsed;
+        // How solid this copy gets once it has faded in.
+        float peak;
         bool flip;
     };
 }

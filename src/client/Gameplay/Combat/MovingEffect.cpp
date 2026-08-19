@@ -18,25 +18,41 @@
 #include "MovingEffect.h"
 
 #include "../../Constants.h"
+#include "../../Util/Randomizer.h"
+
+#include "SpecialMove.h"
 
 namespace jrc
 {
+    namespace
+    {
+        const Randomizer randomizer;
+    }
+
     MovingEffect::MovingEffect(Animation animation, Point<int16_t> origin,
-        Point<int16_t> travel, uint16_t duration, bool flip)
+        Point<int16_t> travel, uint16_t duration, bool flip, int16_t alpha)
         : animation(animation), origin(origin), travel(travel),
-          duration(duration), elapsed(0), flip(flip) {}
+          duration(duration), elapsed(0), flip(flip) {
+
+        const int16_t solid = (alpha > 0)
+            ? alpha
+            : static_cast<int16_t>(randomizer.next_int<int32_t>(
+                FALLING_ALPHA_MIN, FALLING_ALPHA_MAX + 1));
+
+        peak = static_cast<float>(solid) / ALPHA_OPAQUE;
+    }
 
     float MovingEffect::opacity() const
     {
+        // A copy that does not travel is a burst rather than a falling one, and
+        // those are drawn solid from the frame they appear on.
         if (duration <= 0)
             return 1.0f;
 
-        constexpr int32_t FADE_IN_MS = 80;
+        if (elapsed < FALLING_FADE_IN_MS)
+            return peak * elapsed / FALLING_FADE_IN_MS;
 
-        if (elapsed < FADE_IN_MS)
-            return static_cast<float>(elapsed) / FADE_IN_MS;
-
-        return 1.0f;
+        return peak;
     }
 
     void MovingEffect::draw(double viewx, double viewy, float alpha) const

@@ -92,6 +92,9 @@ namespace jrc
             // of playing once.
             uint16_t lifetime;
             int8_t z;
+            // The opacity the skill states for this copy, out of 255; zero when
+            // it states none.
+            int16_t alpha;
             bool flip;
             // Whether origin is a map position or an offset from the caster.
             // Travel alone cannot tell these apart: an explosion copy is

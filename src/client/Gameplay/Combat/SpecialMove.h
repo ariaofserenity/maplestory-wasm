@@ -351,6 +351,20 @@ namespace jrc
     // How long they take to fade away once their hold is over.
     constexpr int32_t TILE_FADE_OUT_MS = 500;
 
+    // A copy thrown by a falling emitter - the arrows of Arrow Rain and Arrow
+    // Eruption, the fire of Inferno, the ice of Blizzard - is created fully
+    // transparent and fades up over this long. It never reaches full strength:
+    // the skill may name the opacity it settles at, and where it does not, one
+    // is rolled per copy out of the range below. Rolling it per copy is what
+    // gives a volley its depth, since no two arrows come down equally solid.
+    // A burst copy is not treated this way - the client hands those straight to
+    // the screen at full opacity.
+    constexpr int32_t FALLING_FADE_IN_MS = 150;
+    constexpr int16_t FALLING_ALPHA_MIN = 128;
+    constexpr int16_t FALLING_ALPHA_MAX = 191;
+    // What a stated or rolled opacity is out of.
+    constexpr int16_t ALPHA_OPAQUE = 255;
+
     // Where in an attack packet a charging skill's gauge is written. Almost
     // every one puts it directly behind the skill id; these four put it at the
     // end of the shoot block instead, and they are the four that keep firing
