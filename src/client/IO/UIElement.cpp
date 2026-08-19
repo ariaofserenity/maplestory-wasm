@@ -93,6 +93,8 @@ namespace jrc
 
     void UIElement::send_icon(const Icon&, Point<int16_t>) {}
 
+    bool UIElement::send_raw_key(int32_t, bool) { return false; }
+
     void UIElement::doubleclick(Point<int16_t>) {}
 
     void UIElement::rightclick(Point<int16_t>) {}

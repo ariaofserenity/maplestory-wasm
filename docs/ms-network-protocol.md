@@ -2072,8 +2072,14 @@ movementData    byte[]  Movement fragments
 
 ```
 Field       Type     Notes
-quickslots  int[8]   Eight quick-slot bindings (skill/item IDs, 0 = empty)
+quickslots  int[8]   Maple key codes, one per quick-slot cell, in cell order
 ```
+
+The quick slot holds keys, not actions: each cell shows whatever the keymap
+(`0x014F`) has bound to the key in that cell, so this packet only reorders which
+keys are on the bar. The codes are the same ones `0x0087` uses, widened to ints
+because the reference client stores them in an `int[8]`. The server rejects a
+body of any other length.
 
 ---
 
@@ -2811,6 +2817,24 @@ type     byte   1=clock (HH:MM:SS), 2=countdown (seconds)
 Field     Type   Notes
 questId   short
 ```
+
+---
+
+### 0x009F — QUICKSLOT_INIT
+
+**Purpose:** Sends which keys the quick slot on the status bar watches, and in
+which order (LP_QuickslotMappedInit). Stored per account, not per character.
+
+```
+Field       Type     Notes
+custom      bool     False = stock order, nothing follows
+quickslots  int[8]   Only when custom; maple key codes in cell order
+```
+
+The stock order is `2A 52 47 49 1D 53 4F 51`, that is shift, insert, home, page
+up on the upper row and control, delete, end, page down on the lower one. The
+server omits the array entirely when the order matches it, so a client has to
+carry that default itself. See `0x00B7` for the way back.
 
 ---
 

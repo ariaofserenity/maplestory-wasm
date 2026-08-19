@@ -63,6 +63,8 @@ namespace jrc
                 return Tooltip::MINIMAP;
             case UIElement::WORLDMAP:
                 return Tooltip::WORLDMAP;
+            case UIElement::STATUSBAR:
+                return Tooltip::STATUSBAR;
             default:
                 return Tooltip::NONE;
             }
@@ -82,7 +84,7 @@ namespace jrc
         const Inventory& inventory = Stage::get().get_player().get_inventory();
 
         emplace<UIStatusMessenger>();
-        emplace<UIStatusbar>(stats);
+        emplace<UIStatusbar>(stats, inventory, Stage::get().get_player().get_skills());
         emplace<UIQuestTracker>(Stage::get().get_player().get_quests());
         emplace<UIMiniMap>(stats);
         emplace<UIBuffList>();
@@ -170,6 +172,14 @@ namespace jrc
         {
             front->rightclick(pos);
         }
+    }
+
+    bool UIStateGame::send_raw_key(int32_t keycode, bool pressed)
+    {
+        UIElement* focusedelement = get(focused);
+
+        return focusedelement && focusedelement->is_active()
+            && focusedelement->send_raw_key(keycode, pressed);
     }
 
     void UIStateGame::send_key(KeyType::Id type, int32_t action, bool pressed, bool escape)

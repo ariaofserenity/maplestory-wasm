@@ -101,7 +101,7 @@ namespace jrc
         FIELD_OBSTACLE_LIST    = 140,
         FIELD_OBSTACLE_RESET   = 141,
         CLOCK                   = 147,
-        LEGACY_FIELD_OBJECT     = 159,
+        QUICKSLOT_INIT          = 159,
 
         // Mapobject
         CHAR_INFO          = 61,
@@ -270,7 +270,7 @@ namespace jrc
         emplace<FIELD_OBSTACLE_ONOFF, NullHandler>();
         emplace<FIELD_OBSTACLE_LIST, NullHandler>();
         emplace<FIELD_OBSTACLE_RESET, NullHandler>();
-        emplace<LEGACY_FIELD_OBJECT, NullHandler>();
+        emplace<QUICKSLOT_INIT, QuickslotHandler>();
         emplace<LOCK_UI, NullHandler>();
         emplace<TOGGLE_UI, NullHandler>();
         emplace<MAKE_NPC_SCRIPTED, NullHandler>();

@@ -112,10 +112,22 @@ namespace jrc
 
         /// Change a skill.
         void change_skill(int32_t skill_id, int32_t level, int32_t masterlevel, int64_t expiration);
-        /// Put a skill on cooldown.
+        /// How much of a skill's cooldown is left, and how long it was to
+        /// begin with, both in milliseconds. Both zero when the skill is ready.
+        struct Cooldown
+        {
+            int32_t remaining = 0;
+            int32_t total = 0;
+        };
+
+        /// Put a skill on cooldown, or clear it when the time given is zero.
         void add_cooldown(int32_t skill_id, int32_t time);
         /// Check if a skill is on cooldown.
         bool has_cooldown(int32_t skill_id) const;
+        /// Return how far through its cooldown a skill is, for drawing it.
+        Cooldown get_cooldown(int32_t skill_id) const;
+        /// Advance every running cooldown by one timestep.
+        void update_cooldowns();
 
         /// Change the player's level, display the levelup effect.
         void change_level(uint16_t level);
@@ -192,7 +204,10 @@ namespace jrc
         ActiveBuffs active_buffs;
         PassiveBuffs passive_buffs;
 
-        std::unordered_map<int32_t, int32_t> cooldowns;
+        // Counted down here rather than waited on, because the server only
+        // says when a cooldown starts and ends: anything that wants to show one
+        // running needs a local clock for it.
+        std::unordered_map<int32_t, Cooldown> cooldowns;
 
         std::map<KeyAction::Id, bool> keysdown;
 

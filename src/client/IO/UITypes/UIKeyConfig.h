@@ -27,12 +27,18 @@ namespace jrc
         UIKeyConfig(const Inventory& inventory, const Skillbook& skillbook);
 
         void draw(float alpha) const override;
+        void update() override;
+        void toggle_active() override;
         CursorResult send_cursor(bool clicked, Point<int16_t> cursorpos) override;
         void send_icon(const Icon& icon, Point<int16_t> cursorpos) override;
         void send_key(int32_t keycode, bool pressed, bool escape) override;
 
         void stage_mapping(Point<int16_t> cursorposition, Keyboard::Mapping mapping);
         void unstage_mapping(Keyboard::Mapping mapping);
+        // Takes on bindings that were changed somewhere else and already sent,
+        // such as a drop on the quickslot. Only the keys named are touched, so
+        // anything the player has staged here and not yet confirmed survives.
+        void adopt_mappings(const std::map<int32_t, Keyboard::Mapping>& changed);
 
     protected:
         Button::State button_pressed(uint16_t buttonid) override;
@@ -47,6 +53,7 @@ namespace jrc
             void drop_on_equips(Equipslot::Id) const override {}
             void drop_on_items(InventoryType::Id, Equipslot::Id, int16_t, bool) const override {}
             void drop_on_bindings(Point<int16_t> cursorposition, bool remove) const override;
+            Keyboard::Mapping get_binding() const override { return mapping; }
 
         private:
             Keyboard::Mapping mapping;
@@ -58,6 +65,11 @@ namespace jrc
 
         void rebuild_dynamic_icons();
         void rebuild_bound_actions();
+        // Rebuilds both of the above. Deferred to the next update rather than
+        // run where a mapping changes, because a mapping can change in the
+        // middle of a drop, while the drag still holds a pointer to one of the
+        // icons these throw away.
+        void refresh_icons();
         void apply_staged_mappings();
         void reset_from_keyboard();
         void reset_to_defaults();
@@ -89,6 +101,7 @@ namespace jrc
         std::set<int32_t> bound_actions;
 
         bool dirty;
+        bool icons_stale;
 
         enum Buttons : uint16_t
         {

@@ -17,8 +17,10 @@
 //////////////////////////////////////////////////////////////////////////////
 #include "UIStatusBar.h"
 
+#include "UIKeyConfig.h"
 #include "UIUserInfo.h"
 
+#include "../KeyBinding.h"
 #include "../UI.h"
 #include "../Components/MapleButton.h"
 
@@ -30,15 +32,25 @@
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
+
 
 namespace jrc
 {
     constexpr Point<int16_t> UIStatusbar::POSITION;
     constexpr Point<int16_t> UIStatusbar::DIMENSION;
+    constexpr int32_t UIStatusbar::DEFAULT_QUICKSLOT_KEYS[UIStatusbar::QUICKSLOT_COUNT];
 
-    UIStatusbar::UIStatusbar(const CharStats& st)
-        : UIElement(POSITION, DIMENSION), stats(st), chatbar(POSITION)
+    UIStatusbar::UIStatusbar(const CharStats& st, const Inventory& inv, const Skillbook& sb)
+        : UIElement(POSITION, DIMENSION), stats(st), inventory(inv), skillbook(sb), chatbar(POSITION)
     {
+        std::copy(
+            std::begin(DEFAULT_QUICKSLOT_KEYS),
+            std::end(DEFAULT_QUICKSLOT_KEYS),
+            quickslot_keys.begin()
+        );
+        quickslot_counts.fill(-1);
+
         nl::node mainbar = nl::nx::ui["StatusBar2.img"]["mainBar"];
 
         sprites.emplace_back(mainbar["backgrnd"]);
@@ -136,6 +148,16 @@ namespace jrc
 
         place_button(BT_KEYSETTING, mainbar["BtKeysetting"], BT_KEYSETTING_POS);
 
+        // Shared by every cell, so they are read once here rather than looked
+        // up per frame while a cooldown runs.
+        nl::node cooltime_src = nl::nx::ui["UIWindow.img"]["Skill"]["CoolTime"];
+        for (size_t frame = 0; frame < COOLTIME_FRAMES; ++frame)
+        {
+            cooltime[frame] = cooltime_src[std::to_string(frame)];
+        }
+
+        rebuild_quickslot_labels();
+        rebuild_quickslot();
         update_layout_position();
     }
 
@@ -203,6 +225,37 @@ namespace jrc
         joblabel.draw(position + Point<int16_t>(-435, -21));
         namelabel.draw(position + Point<int16_t>(-435, -36));
 
+        for (size_t i = 0; i < QUICKSLOT_COUNT; ++i)
+        {
+            Point<int16_t> cell = position + quickslot_position(i);
+
+            if (quickslot_icons[i])
+            {
+                quickslot_icons[i]->draw(cell);
+
+                if (const Texture* shade = quickslot_cooltime(i))
+                {
+                    shade->draw(cell);
+                }
+
+                continue;
+            }
+
+            // Only an empty cell says which key it is. The cell is exactly one
+            // icon wide and the bar leaves no room underneath, so a name on a
+            // filled one would have to sit across the artwork it is standing in
+            // for, and the icon is the more useful of the two to be able to read.
+            if (quickslot_labels[i].is_valid())
+            {
+                Point<int16_t> label = quickslot_labels[i].get_dimensions();
+
+                quickslot_labels[i].draw(cell + Point<int16_t>(
+                    static_cast<int16_t>((QUICKSLOT_ICON_SIZE - label.x()) / 2),
+                    static_cast<int16_t>(QUICKSLOT_ICON_SIZE - label.y() - QUICKSLOT_LABEL_INSET)
+                ));
+            }
+        }
+
         chatbar.draw(alpha);
     }
 
@@ -211,6 +264,7 @@ namespace jrc
         update_layout_position();
         UIElement::update();
 
+        rebuild_quickslot();
         chatbar.update();
 
         expbar.update(getexppercent());
@@ -325,6 +379,202 @@ namespace jrc
         }
     }
 
+    void UIStatusbar::set_quickslot_keys(const std::array<int32_t, QUICKSLOT_COUNT>& keys)
+    {
+        quickslot_keys = keys;
+        rebuild_quickslot_labels();
+        rebuild_quickslot();
+    }
+
+    const std::array<int32_t, UIStatusbar::QUICKSLOT_COUNT>& UIStatusbar::get_quickslot_keys() const
+    {
+        return quickslot_keys;
+    }
+
+    void UIStatusbar::rebuild_quickslot_labels()
+    {
+        // Named per key code rather than per cell, so the names follow the keys
+        // when the server hands back an order other than the stock one. The set
+        // belongs to the dialog that reorders the quickslot, which is why it is
+        // sized for these cells rather than for the key config's larger caps.
+        nl::node names = nl::nx::ui["UIWindow2.img"]["KeyConfig"]["quickslotConfig"]["key"];
+
+        for (size_t i = 0; i < QUICKSLOT_COUNT; ++i)
+        {
+            nl::node name = names[std::to_string(quickslot_keys[i])];
+            quickslot_labels[i] = name ? Texture(name) : Texture();
+        }
+    }
+
+    void UIStatusbar::rebuild_quickslot()
+    {
+        const Keyboard& keyboard = UI::get().get_keyboard();
+
+        for (size_t i = 0; i < QUICKSLOT_COUNT; ++i)
+        {
+            // A cell being dragged from has handed its icon out as a bare
+            // pointer, which the drag holds until it is dropped. Replacing the
+            // icon underneath it, which a stack shrinking mid-drag would
+            // otherwise do, leaves that pointer dangling.
+            if (quickslot_icons[i] && quickslot_icons[i]->is_dragged())
+            {
+                continue;
+            }
+
+            Keyboard::Mapping mapping = keyboard.get_maple_mapping(quickslot_keys[i]);
+
+            // Stacks are only shown for items, and the number is the whole
+            // inventory rather than one slot, because the key uses whichever
+            // stack comes to hand rather than a slot the player picked.
+            int16_t count = -1;
+            if (mapping.type == KeyType::ITEM || mapping.type == KeyType::CASH)
+            {
+                count = static_cast<int16_t>(inventory.get_total_item_count(mapping.action));
+            }
+
+            if (quickslot_bindings[i] == mapping && quickslot_counts[i] == count)
+            {
+                continue;
+            }
+
+            quickslot_bindings[i] = mapping;
+            quickslot_counts[i] = count;
+
+            Texture texture = KeyBinding::icon_for(mapping);
+            if (!texture.is_valid())
+            {
+                quickslot_icons[i].reset();
+                continue;
+            }
+
+            quickslot_icons[i] = std::make_unique<Icon>(
+                std::make_unique<QuickslotIcon>(mapping), texture, count
+            );
+        }
+    }
+
+    const Texture* UIStatusbar::quickslot_cooltime(size_t index) const
+    {
+        const Keyboard::Mapping& mapping = quickslot_bindings[index];
+        if (mapping.type != KeyType::SKILL)
+        {
+            return nullptr;
+        }
+
+        Player::Cooldown cd = Stage::get().get_player().get_cooldown(mapping.action);
+        if (cd.total <= 0)
+        {
+            return nullptr;
+        }
+
+        // Stepped on whole seconds of remaining time rather than on the raw
+        // milliseconds, so a long cooldown moves in visible steps instead of
+        // creeping, and a short one still reaches the end of the run.
+        int32_t total = cd.total / 1000;
+        int32_t elapsed = total - cd.remaining / 1000;
+        if (total <= 0)
+        {
+            return nullptr;
+        }
+
+        auto frame = static_cast<size_t>(
+            std::clamp<int32_t>(elapsed * COOLTIME_LAST / total, 0, COOLTIME_LAST)
+        );
+
+        return &cooltime[frame];
+    }
+
+    Point<int16_t> UIStatusbar::quickslot_position(size_t index) const
+    {
+        auto column = static_cast<int16_t>(index % QUICKSLOT_COLUMNS);
+        auto row = static_cast<int16_t>(index / QUICKSLOT_COLUMNS);
+
+        return QUICKSLOT_POS + Point<int16_t>(
+            static_cast<int16_t>(column * QUICKSLOT_STEP),
+            static_cast<int16_t>(row * QUICKSLOT_STEP)
+        );
+    }
+
+    Rectangle<int16_t> UIStatusbar::quickslot_bounds() const
+    {
+        constexpr auto rows = static_cast<int16_t>(QUICKSLOT_COUNT / QUICKSLOT_COLUMNS);
+
+        Point<int16_t> lt = position + QUICKSLOT_POS;
+        Point<int16_t> size = {
+            static_cast<int16_t>((QUICKSLOT_COLUMNS - 1) * QUICKSLOT_STEP + QUICKSLOT_ICON_SIZE),
+            static_cast<int16_t>((rows - 1) * QUICKSLOT_STEP + QUICKSLOT_ICON_SIZE)
+        };
+
+        return { lt, lt + size };
+    }
+
+    size_t UIStatusbar::quickslot_by_position(Point<int16_t> cursorpos) const
+    {
+        for (size_t i = 0; i < QUICKSLOT_COUNT; ++i)
+        {
+            Point<int16_t> lt = position + quickslot_position(i);
+            Rectangle<int16_t> cell(
+                lt,
+                lt + Point<int16_t>(QUICKSLOT_ICON_SIZE, QUICKSLOT_ICON_SIZE)
+            );
+
+            if (cell.contains(cursorpos))
+            {
+                return i;
+            }
+        }
+
+        return QUICKSLOT_COUNT;
+    }
+
+    void UIStatusbar::show_quickslot_tooltip(size_t index) const
+    {
+        const Keyboard::Mapping& mapping = quickslot_bindings[index];
+
+        switch (mapping.type)
+        {
+        case KeyType::SKILL:
+            UI::get().show_skill(
+                Tooltip::STATUSBAR,
+                mapping.action,
+                skillbook.get_level(mapping.action),
+                skillbook.get_masterlevel(mapping.action),
+                skillbook.get_expiration(mapping.action)
+            );
+            break;
+        case KeyType::ITEM:
+        case KeyType::CASH:
+            UI::get().show_item(Tooltip::STATUSBAR, mapping.action);
+            break;
+        default:
+            UI::get().clear_tooltip(Tooltip::STATUSBAR);
+            break;
+        }
+    }
+
+    void UIStatusbar::QuickslotIcon::drop_on_stage() const
+    {
+        KeyBinding::unbind(mapping);
+    }
+
+    void UIStatusbar::QuickslotIcon::drop_on_bindings(Point<int16_t> cursorposition, bool remove) const
+    {
+        // Dropped back into the key config window, which stages its changes
+        // instead of sending them, so the binding has to travel through it
+        // rather than being applied here.
+        if (auto keyconfig = UI::get().get_element<UIKeyConfig>())
+        {
+            if (remove)
+            {
+                keyconfig->unstage_mapping(mapping);
+            }
+            else
+            {
+                keyconfig->stage_mapping(cursorposition, mapping);
+            }
+        }
+    }
+
     void UIStatusbar::update_layout_position()
     {
         position = {
@@ -421,11 +671,20 @@ namespace jrc
             return true;
         }
 
+        // The bottom row of quickslot cells ends a couple of pixels below the
+        // area above, which would otherwise leave a strip of them unreachable.
+        if (quickslot_bounds().contains(cursorpos))
+        {
+            return true;
+        }
+
         return bounds.contains(cursorpos) || chatbar.is_in_range(cursorpos);
     }
 
     bool UIStatusbar::remove_cursor(bool clicked, Point<int16_t> cursorpos)
     {
+        UI::get().clear_tooltip(Tooltip::STATUSBAR);
+
         if (chatbar.remove_cursor(clicked, cursorpos))
         {
             return true;
@@ -436,6 +695,31 @@ namespace jrc
 
     UIElement::CursorResult UIStatusbar::send_cursor(bool pressed, Point<int16_t> cursorpos)
     {
+        if (size_t slot = quickslot_by_position(cursorpos); slot < QUICKSLOT_COUNT)
+        {
+            show_quickslot_tooltip(slot);
+
+            if (quickslot_icons[slot])
+            {
+                if (pressed)
+                {
+                    // A press starts a drag rather than firing the binding,
+                    // matching every other icon in the ui. The action still runs
+                    // if the button comes back up without the cursor having left
+                    // the cell, which is handled where the drag is dropped.
+                    quickslot_icons[slot]->start_drag(cursorpos - position - quickslot_position(slot));
+                    UI::get().drag_icon(quickslot_icons[slot].get());
+                    return { Cursor::GRABBING, true };
+                }
+
+                return { Cursor::CANGRAB, true };
+            }
+
+            return { Cursor::IDLE, true };
+        }
+
+        UI::get().clear_tooltip(Tooltip::STATUSBAR);
+
         if (chatbar.is_in_range(cursorpos))
         {
             if (CursorResult child_result = chatbar.send_cursor(pressed, cursorpos))
@@ -448,6 +732,34 @@ namespace jrc
 
         chatbar.send_cursor(pressed, cursorpos);
         return UIElement::send_cursor(pressed, cursorpos);
+    }
+
+    void UIStatusbar::send_icon(const Icon& icon, Point<int16_t> cursorpos)
+    {
+        size_t slot = quickslot_by_position(cursorpos);
+        if (slot >= QUICKSLOT_COUNT)
+        {
+            return;
+        }
+
+        Keyboard::Mapping mapping = icon.get_binding();
+        if (mapping.type == KeyType::NONE)
+        {
+            return;
+        }
+
+        // Lifted off a cell and put straight back down on it. Nothing moved, so
+        // the player meant to click it rather than to drag it anywhere.
+        if (mapping == quickslot_bindings[slot])
+        {
+            UI::get().send_action(mapping.type, mapping.action);
+            return;
+        }
+
+        // Deliberately not rebuilt here. The icon that was dropped may well be
+        // one of these, and the drag still holds a pointer to it for a moment
+        // after this returns; the next tick picks the change up instead.
+        KeyBinding::bind(quickslot_keys[slot], mapping);
     }
 
     void UIStatusbar::send_chatline(const std::string& line, UIChatbar::LineType type)

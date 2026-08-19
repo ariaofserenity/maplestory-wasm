@@ -37,7 +37,8 @@ namespace jrc
             SKILLBOOK,
             SHOP,
             MINIMAP,
-            WORLDMAP
+            WORLDMAP,
+            STATUSBAR
         };
 
         virtual ~Tooltip() = default;

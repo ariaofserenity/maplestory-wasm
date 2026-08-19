@@ -50,6 +50,22 @@ namespace jrc
         GLFW_KEY_PAGE_DOWN, GLFW_KEY_INSERT, GLFW_KEY_DELETE, GLFW_KEY_ESCAPE, GLFW_KEY_RIGHT_CONTROL, GLFW_KEY_RIGHT_SHIFT, GLFW_KEY_RIGHT_ALT, GLFW_KEY_SCROLL_LOCK
     };
 
+    int32_t Keyboard::maple_keycode(int32_t keycode)
+    {
+        // Searched rather than reversed into a second table, because this runs
+        // once per key press in a dialog that is waiting on the player anyway,
+        // and a second table would be one more thing to keep in step.
+        for (int32_t key = 0; key < 90; ++key)
+        {
+            if (Keytable[key] == keycode && keycode != 0)
+            {
+                return key;
+            }
+        }
+
+        return 0;
+    }
+
     Keyboard::Keyboard()
     {
         keymap[GLFW_KEY_LEFT]  = { KeyType::ACTION, KeyAction::LEFT  };

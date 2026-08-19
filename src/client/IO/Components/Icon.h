@@ -16,6 +16,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.    //
 //////////////////////////////////////////////////////////////////////////////
 #pragma once
+#include "../Keyboard.h"
+
 #include "../../Character/Inventory/Inventory.h"
 #include "../../Graphics/Texture.h"
 
@@ -35,6 +37,12 @@ namespace jrc
             virtual void drop_on_equips(Equipslot::Id eqslot) const = 0;
             virtual void drop_on_items(InventoryType::Id tab, Equipslot::Id eqslot, int16_t slot, bool equip) const = 0;
             virtual void drop_on_bindings(Point<int16_t>, bool) const {}
+
+            // The key binding this icon stands for, if it is something a key can
+            // be bound to at all. Drop targets that bind keys need to know what
+            // was dropped on them, and asking the icon keeps each of them free
+            // of a list of every kind of icon that might land there.
+            virtual Keyboard::Mapping get_binding() const { return {}; }
         };
 
 
@@ -54,7 +62,9 @@ namespace jrc
         void drop_on_equips(Equipslot::Id eqslot) const;
         void drop_on_items(InventoryType::Id tab, Equipslot::Id eqslot, int16_t slot, bool equip) const;
         void drop_on_bindings(Point<int16_t> cursorpos, bool remove) const;
+        Keyboard::Mapping get_binding() const;
         void start_drag(Point<int16_t> offset);
+        bool is_dragged() const;
         void reset();
         void set_count(int16_t count);
         int16_t get_count() const;

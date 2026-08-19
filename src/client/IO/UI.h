@@ -69,6 +69,10 @@ namespace jrc
         // when press and release are delivered to different places.
         bool is_key_pressed(int32_t keycode) const;
         void send_menu(KeyAction::Id action);
+        // Runs a binding as though its key had been pressed and let go again.
+        // Used where the ui itself triggers one rather than the keyboard, such
+        // as a click on a quickslot.
+        void send_action(KeyType::Id type, int32_t action);
 
         void set_scrollnotice(const std::string& notice);
         void focus_textfield(Textfield* textfield);

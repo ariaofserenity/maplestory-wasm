@@ -18,19 +18,25 @@
 #pragma once
 #include "UIChatBar.h"
 
+#include "../Keyboard.h"
 #include "../UIElement.h"
 #include "../Messages.h"
 
 #include "../Components/Charset.h"
 #include "../Components/Gauge.h"
+#include "../Components/Icon.h"
 #include "../Components/Textfield.h"
 
 #include "../../Character/CharStats.h"
 #include "../../Character/Inventory/Inventory.h"
 #include "../../Character/Job.h"
+#include "../../Character/SkillBook.h"
 #include "../../Graphics/Animation.h"
 #include "../../Graphics/Text.h"
 
+#include <array>
+#include <cstddef>
+#include <memory>
 #include <vector>
 
 namespace jrc
@@ -42,7 +48,11 @@ namespace jrc
         static constexpr bool FOCUSED = false;
         static constexpr bool TOGGLED = true;
 
-        UIStatusbar(const CharStats& stats);
+        // Number of keys the quickslot shows at once. Fixed by the server, which
+        // stores exactly this many and rejects anything else.
+        static constexpr size_t QUICKSLOT_COUNT = 8;
+
+        UIStatusbar(const CharStats& stats, const Inventory& inventory, const Skillbook& skillbook);
 
         void draw(float alpha) const override;
         void update() override;
@@ -50,6 +60,12 @@ namespace jrc
         bool is_in_range(Point<int16_t> cursorpos) const override;
         bool remove_cursor(bool clicked, Point<int16_t> cursorpos) override;
         CursorResult send_cursor(bool pressed, Point<int16_t> cursorpos) override;
+        void send_icon(const Icon& icon, Point<int16_t> cursorpos) override;
+
+        // Replaces which keys the quickslot watches. Sent by the server on
+        // entering a field; the order is per account, not per character.
+        void set_quickslot_keys(const std::array<int32_t, QUICKSLOT_COUNT>& keys);
+        const std::array<int32_t, QUICKSLOT_COUNT>& get_quickslot_keys() const;
 
         void send_chatline(const std::string& line, UIChatbar::LineType type);
         void focus_chatfield();
@@ -81,11 +97,43 @@ namespace jrc
             BUBBLE_OPTIONS
         };
 
+        // A quickslot cell, drawn with whatever its key is currently bound to.
+        // Dragging the icon off the bar clears that binding, which is why the
+        // icon has to carry the binding it was built from.
+        class QuickslotIcon : public Icon::Type
+        {
+        public:
+            explicit QuickslotIcon(Keyboard::Mapping in_mapping) : mapping(in_mapping) {}
+
+            void drop_on_stage() const override;
+            void drop_on_equips(Equipslot::Id) const override {}
+            void drop_on_items(InventoryType::Id, Equipslot::Id, int16_t, bool) const override {}
+            void drop_on_bindings(Point<int16_t> cursorposition, bool remove) const override;
+            Keyboard::Mapping get_binding() const override { return mapping; }
+
+        private:
+            Keyboard::Mapping mapping;
+        };
+
         void update_layout_position();
         void open_own_userinfo();
         void draw_bubble(Point<int16_t> at, int16_t height) const;
         Rectangle<int16_t> bubble_bounds() const;
         void set_bubble(Bubble which);
+
+        void rebuild_quickslot();
+        void rebuild_quickslot_labels();
+        // The shade covering a cell whose skill is still on cooldown, or an
+        // empty texture when it is ready. Steps through the artwork's frames as
+        // the cooldown drains rather than being drawn as a bar of its own.
+        const Texture* quickslot_cooltime(size_t index) const;
+        Point<int16_t> quickslot_position(size_t index) const;
+        Rectangle<int16_t> quickslot_bounds() const;
+        // Index of the cell under the cursor, or QUICKSLOT_COUNT when the cursor
+        // is elsewhere.
+        size_t quickslot_by_position(Point<int16_t> cursorpos) const;
+        void show_quickslot_tooltip(size_t index) const;
+
         float getexppercent() const;
         float gethppercent() const;
         float getmppercent() const;
@@ -180,6 +228,33 @@ namespace jrc
             static_cast<int16_t>(BT_OPTIONS_POS.y() - OPTIONS_HEIGHT)
         };
 
+        // Quickslot cells. The bar artwork already paints eight empty cells at
+        // its right end, so these follow the artwork rather than being placed
+        // freely: the top left of the first cell, then a step of one cell plus
+        // the divider the artwork leaves between them. The cells are 32 square,
+        // which is the size every bindable icon is drawn at.
+        static constexpr Point<int16_t> QUICKSLOT_POS = { 376, -67 };
+        static constexpr int16_t QUICKSLOT_STEP = 33;
+        static constexpr int16_t QUICKSLOT_COLUMNS = 4;
+        static constexpr int16_t QUICKSLOT_ICON_SIZE = 32;
+
+        // Room left under the key name. The artwork's printed cell interior
+        // stops three pixels short of the cell itself, so this sits the name on
+        // that edge rather than on the frame below it.
+        static constexpr int16_t QUICKSLOT_LABEL_INSET = 3;
+
+        // Frames of the cooldown shade. The last is the clear one, so a running
+        // cooldown only ever reaches the one before it.
+        static constexpr size_t COOLTIME_FRAMES = 16;
+        static constexpr int32_t COOLTIME_LAST = COOLTIME_FRAMES - 2;
+
+        // Which keys the eight cells stand for before the server says otherwise.
+        // These are the maple key codes of shift, insert, home, page up, control,
+        // delete, end and page down, in the order the cells are laid out.
+        static constexpr int32_t DEFAULT_QUICKSLOT_KEYS[QUICKSLOT_COUNT] = {
+            0x2A, 0x52, 0x47, 0x49, 0x1D, 0x53, 0x4F, 0x51
+        };
+
         static constexpr Point<int16_t> POSITION  = {  512, 590 };
         static constexpr Point<int16_t> DIMENSION = { 1366, 80  };
         // How long escape has to be held before an open popup is dismissed.
@@ -188,6 +263,21 @@ namespace jrc
         static constexpr time_t MESSAGE_COOLDOWN = 1'000;
 
         const CharStats& stats;
+        const Inventory& inventory;
+        const Skillbook& skillbook;
+
+        std::array<int32_t, QUICKSLOT_COUNT> quickslot_keys;
+        // What each cell was last built from. Kept alongside the icons so the
+        // set only has to be rebuilt when a binding or a stack size actually
+        // changes, rather than on every tick.
+        std::array<Keyboard::Mapping, QUICKSLOT_COUNT> quickslot_bindings;
+        std::array<int16_t, QUICKSLOT_COUNT> quickslot_counts;
+        std::array<std::unique_ptr<Icon>, QUICKSLOT_COUNT> quickslot_icons;
+        // Name of the key each cell stands for. Depends only on which keys are
+        // in which cell, not on what they are bound to, so it is rebuilt with
+        // the order rather than with the icons.
+        std::array<Texture, QUICKSLOT_COUNT> quickslot_labels;
+        std::array<Texture, COOLTIME_FRAMES> cooltime;
 
         EnumMap<Messages::Type, time_t> message_cooldowns;
 

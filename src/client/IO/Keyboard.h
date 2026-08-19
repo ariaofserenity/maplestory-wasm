@@ -51,6 +51,11 @@ namespace jrc
 
         Keyboard();
 
+        // The maple key code a physical key carries, or zero for a key maple
+        // has no code for. Needed wherever a key has to be named rather than
+        // acted on, such as when picking one for a quickslot.
+        static int32_t maple_keycode(int32_t keycode);
+
         void assign(uint8_t key, uint8_t type, int32_t action);
         void remove(uint8_t key);
         std::map<int32_t, Mapping> get_maplekeys() const;

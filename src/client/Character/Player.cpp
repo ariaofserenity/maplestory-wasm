@@ -198,6 +198,8 @@ namespace jrc
 
     int8_t Player::update(const Physics& physics)
     {
+        update_cooldowns();
+
         if (state == DIED)
         {
             Char::update(physics, 1.0f);
@@ -539,18 +541,47 @@ namespace jrc
 
     void Player::add_cooldown(int32_t skill_id, int32_t cooltime)
     {
-        cooldowns[skill_id] = cooltime;
+        // The server sends a zero to say a cooldown is over, which arrives
+        // whether or not the local count has run out yet, so it wins either way.
+        if (cooltime <= 0)
+        {
+            cooldowns.erase(skill_id);
+            return;
+        }
+
+        // Sent in seconds; kept in milliseconds so it can be counted down a
+        // timestep at a time.
+        int32_t total = cooltime * 1000;
+        cooldowns[skill_id] = { total, total };
     }
 
     bool Player::has_cooldown(int32_t skill_id) const
     {
+        return cooldowns.count(skill_id) > 0;
+    }
+
+    Player::Cooldown Player::get_cooldown(int32_t skill_id) const
+    {
         auto iter = cooldowns.find(skill_id);
         if (iter == cooldowns.end())
         {
-            return false;
+            return {};
         }
 
-        return iter->second > 0;
+        return iter->second;
+    }
+
+    void Player::update_cooldowns()
+    {
+        for (auto iter = cooldowns.begin(); iter != cooldowns.end(); )
+        {
+            iter->second.remaining -= Constants::TIMESTEP;
+
+            // Only dropped once it has actually run out locally. The server
+            // sends its own end, but a skill whose count is up is usable again
+            // regardless, and holding it back would cost the player a cast.
+            iter = iter->second.remaining <= 0 ? cooldowns.erase(iter) : std::next(iter);
+        }
     }
 
     void Player::change_level(uint16_t level)

@@ -211,6 +211,7 @@ namespace jrc
         {
             std::list<UIElement::Type> escape_types = {
                 UIElement::WORLDMAP,
+                UIElement::QUICKSLOTCONFIG,
                 UIElement::KEYCONFIG,
                 UIElement::NPCTALK,
                 UIElement::SHOP,
@@ -232,6 +233,14 @@ namespace jrc
                 state->send_key(KeyType::NONE, 0, pressed, true);
             }
 
+            is_key_down[keycode] = pressed;
+            return;
+        }
+
+        // Offered before the keymap, so a key with nothing bound to it still
+        // reaches something waiting to be told which key was pressed.
+        if (state->send_raw_key(keycode, pressed))
+        {
             is_key_down[keycode] = pressed;
             return;
         }
@@ -290,6 +299,19 @@ namespace jrc
     void UI::send_menu(KeyAction::Id action)
     {
         state->send_key(KeyType::MENU, action, true, false);
+    }
+
+    void UI::send_action(KeyType::Id type, int32_t action)
+    {
+        if (type == KeyType::NONE)
+        {
+            return;
+        }
+
+        // The release matters for the held actions, which stay down until one
+        // arrives; menus ignore it, so it costs nothing to always send both.
+        state->send_key(type, action, true, false);
+        state->send_key(type, action, false, false);
     }
 
     void UI::set_scrollnotice(const std::string& notice)

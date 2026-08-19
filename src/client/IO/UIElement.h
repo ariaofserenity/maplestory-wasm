@@ -74,6 +74,7 @@ namespace jrc
             QUESTLOG,
             QUESTTRACKER,
             KEYCONFIG,
+            QUICKSLOTCONFIG,
             PARTY,
             MINIMAP,
             WORLDMAP,
@@ -102,6 +103,11 @@ namespace jrc
         virtual CursorResult send_cursor(bool clicked, Point<int16_t> cursorpos);
         virtual void send_scroll(double yoffset);
         virtual void send_key(int32_t keycode, bool pressed, bool escape);
+        // Offered the physical key before it is looked up in the keymap.
+        // Returning true consumes it. Only of use to something picking a key
+        // rather than acting on one, which has to see keys the keymap has
+        // nothing bound to as well.
+        virtual bool send_raw_key(int32_t keycode, bool pressed);
         virtual UIElement::Type get_type() const;
 
         void set_type(UIElement::Type value);

@@ -43,6 +43,9 @@ namespace jrc
         virtual void doubleclick(Point<int16_t> pos) = 0;
         virtual void rightclick(Point<int16_t> pos) = 0;
         virtual void send_key(KeyType::Id type, int32_t action, bool pressed, bool escape) = 0;
+        // Offers the key to whatever is focused before it is looked up in the
+        // keymap. True means it was consumed and must not be acted on.
+        virtual bool send_raw_key(int32_t keycode, bool pressed) = 0;
         virtual Cursor::State send_cursor(Cursor::State mst, Point<int16_t> pos) = 0;
         virtual void send_scroll(Point<int16_t> pos, double yoffset) = 0;
         virtual void send_close() = 0;
@@ -72,6 +75,7 @@ namespace jrc
         void doubleclick(Point<int16_t>) override {}
         void rightclick(Point<int16_t>) override {}
         void send_key(KeyType::Id, int32_t, bool, bool) override {}
+        bool send_raw_key(int32_t, bool) override { return false; }
         Cursor::State send_cursor(Cursor::State, Point<int16_t>) override { return Cursor::IDLE; }
         void send_scroll(Point<int16_t>, double) override {}
         void send_close() override {}

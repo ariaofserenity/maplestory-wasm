@@ -117,6 +117,7 @@ namespace jrc
         GIVE_FAME = 95,
         CHAR_INFO_REQUEST = 97,
         CHANGE_KEYMAP = 135,
+        CHANGE_QUICKSLOT = 183,
 
         // Skill
         USE_SKILL    = 91,

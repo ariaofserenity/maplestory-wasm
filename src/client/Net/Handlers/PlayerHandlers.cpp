@@ -24,7 +24,10 @@
 #include "../../IO/UITypes/UINotice.h"
 #include "../../IO/UITypes/UIStatsInfo.h"
 #include "../../IO/UITypes/UISkillBook.h"
+#include "../../IO/UITypes/UIStatusBar.h"
 #include "../../Net/Packets/GameplayPackets.h"
+
+#include <array>
 
 namespace jrc
 {
@@ -38,6 +41,31 @@ namespace jrc
             int32_t action = recv.read_int();
 
             UI::get().add_keymapping(i, type, action);
+        }
+    }
+
+
+    void QuickslotHandler::handle(InPacket& recv) const
+    {
+        // The server sends nothing at all when the order is the stock one, which
+        // is what the status bar already starts from, so there is no work to do.
+        if (!recv.read_bool())
+        {
+            return;
+        }
+
+        std::array<int32_t, UIStatusbar::QUICKSLOT_COUNT> keys{};
+        for (auto& key : keys)
+        {
+            // Widened to an int on the wire even though no key code reaches past
+            // a byte, because the client this protocol was written for keeps
+            // them in an int array and rejects anything shorter.
+            key = recv.read_int();
+        }
+
+        if (auto statusbar = UI::get().get_element<UIStatusbar>())
+        {
+            statusbar->set_quickslot_keys(keys);
         }
     }
 

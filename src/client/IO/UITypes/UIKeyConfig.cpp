@@ -4,13 +4,11 @@
 #include "UIKeyConfig.h"
 
 #include "UINotice.h"
+#include "UIQuickslotConfig.h"
 
+#include "../KeyBinding.h"
 #include "../UI.h"
 #include "../Components/MapleButton.h"
-
-#include "../../Data/ItemData.h"
-#include "../../Data/SkillData.h"
-#include "../../Net/Packets/PlayerPackets.h"
 
 #include "nlnx/nx.hpp"
 
@@ -98,7 +96,8 @@ namespace jrc
           inventory(in_inventory),
           skillbook(in_skillbook),
           keyboard(&UI::get().get_keyboard()),
-          dirty(false)
+          dirty(false),
+          icons_stale(false)
     {
         // The legacy UIWindow node still carries the original korean button
         // artwork and lacks the two inner background layers requested just
@@ -139,6 +138,9 @@ namespace jrc
         load_action_icons();
         load_unbound_action_positions();
         reset_from_keyboard();
+        // Nothing can be mid-drag while the window is still being built, so the
+        // first set is safe to raise here rather than waiting for a tick.
+        refresh_icons();
     }
 
     void UIKeyConfig::draw(float alpha) const
@@ -172,6 +174,32 @@ namespace jrc
             {
                 kv.second->draw(position + pit->second);
             }
+        }
+    }
+
+    void UIKeyConfig::update()
+    {
+        UIElement::update();
+
+        if (icons_stale)
+        {
+            refresh_icons();
+        }
+    }
+
+    void UIKeyConfig::toggle_active()
+    {
+        UIElement::toggle_active();
+
+        // The window is kept around between openings, so its staged copy of the
+        // bindings goes stale while it is hidden: the server can send a fresh
+        // keymap, or the player can rebind from the quickslot. Anything left
+        // staged and unconfirmed is only reachable through the close prompt, so
+        // reaching here with changes pending means the player asked to keep
+        // them.
+        if (is_active() && !dirty)
+        {
+            reset_from_keyboard();
         }
     }
 
@@ -272,8 +300,7 @@ namespace jrc
                 {
                     staged_mappings.clear();
                     dirty = true;
-                    rebuild_dynamic_icons();
-                    rebuild_bound_actions();
+                    icons_stale = true;
                 }
             };
             UI::get().emplace<UIYesNo>("Clear all key bindings?", on_decide);
@@ -284,6 +311,8 @@ namespace jrc
             toggle_active();
             break;
         case KEYSETTING:
+            UI::get().emplace<UIQuickslotConfig>();
+            break;
         default:
             break;
         }
@@ -312,29 +341,13 @@ namespace jrc
 
         erase_mapping_value(staged_mappings, mapping);
 
-        if (key_slot == KeyConfig::LEFT_CONTROL || key_slot == KeyConfig::RIGHT_CONTROL)
+        for (int32_t key : KeyBinding::paired_keys(key_slot))
         {
-            staged_mappings[KeyConfig::LEFT_CONTROL] = mapping;
-            staged_mappings[KeyConfig::RIGHT_CONTROL] = mapping;
-        }
-        else if (key_slot == KeyConfig::LEFT_ALT || key_slot == KeyConfig::RIGHT_ALT)
-        {
-            staged_mappings[KeyConfig::LEFT_ALT] = mapping;
-            staged_mappings[KeyConfig::RIGHT_ALT] = mapping;
-        }
-        else if (key_slot == KeyConfig::LEFT_SHIFT || key_slot == KeyConfig::RIGHT_SHIFT)
-        {
-            staged_mappings[KeyConfig::LEFT_SHIFT] = mapping;
-            staged_mappings[KeyConfig::RIGHT_SHIFT] = mapping;
-        }
-        else
-        {
-            staged_mappings[key_slot] = mapping;
+            staged_mappings[key] = mapping;
         }
 
         dirty = true;
-        rebuild_dynamic_icons();
-        rebuild_bound_actions();
+        icons_stale = true;
     }
 
     void UIKeyConfig::unstage_mapping(Keyboard::Mapping mapping)
@@ -347,8 +360,7 @@ namespace jrc
         erase_mapping_value(staged_mappings, mapping);
 
         dirty = true;
-        rebuild_dynamic_icons();
-        rebuild_bound_actions();
+        icons_stale = true;
     }
 
     void UIKeyConfig::load_key_bounds()
@@ -561,8 +573,9 @@ namespace jrc
                 int32_t skill_id = mapping.action;
                 if (skill_icons.count(skill_id) == 0)
                 {
-                    Texture tx = SkillData::get(skill_id).get_icon(SkillData::NORMAL);
-                    skill_icons[skill_id] = std::make_unique<Icon>(std::make_unique<KeyIcon>(mapping), tx, -1);
+                    skill_icons[skill_id] = std::make_unique<Icon>(
+                        std::make_unique<KeyIcon>(mapping), KeyBinding::icon_for(mapping), -1
+                    );
                 }
             }
             else if (mapping.type == KeyType::ITEM)
@@ -570,11 +583,40 @@ namespace jrc
                 int32_t item_id = mapping.action;
                 if (item_icons.count(item_id) == 0)
                 {
-                    Texture tx = ItemData::get(item_id).get_icon(false);
-                    item_icons[item_id] = std::make_unique<Icon>(std::make_unique<KeyIcon>(mapping), tx, -1);
+                    item_icons[item_id] = std::make_unique<Icon>(
+                        std::make_unique<KeyIcon>(mapping), KeyBinding::icon_for(mapping), -1
+                    );
                 }
             }
         }
+    }
+
+    void UIKeyConfig::adopt_mappings(const std::map<int32_t, Keyboard::Mapping>& changed)
+    {
+        for (const auto& kv : changed)
+        {
+            if (kv.second.type == KeyType::NONE)
+            {
+                staged_mappings.erase(kv.first);
+            }
+            else
+            {
+                staged_mappings[kv.first] = kv.second;
+            }
+        }
+
+        // These arrived already sent, so they leave the unsaved flag as it was:
+        // they add nothing to confirm, and they must not clear edits the player
+        // made here and has not confirmed yet.
+        icons_stale = true;
+    }
+
+    void UIKeyConfig::refresh_icons()
+    {
+        rebuild_dynamic_icons();
+        rebuild_bound_actions();
+
+        icons_stale = false;
     }
 
     void UIKeyConfig::rebuild_bound_actions()
@@ -592,37 +634,7 @@ namespace jrc
 
     void UIKeyConfig::apply_staged_mappings()
     {
-        std::vector<std::tuple<int32_t, uint8_t, int32_t>> updates;
-
-        for (int32_t keycode = 1; keycode < KeyConfig::LENGTH; ++keycode)
-        {
-            Keyboard::Mapping staged = staged_mapping(keycode);
-            Keyboard::Mapping current = keyboard->get_maple_mapping(keycode);
-            if (staged != current)
-            {
-                updates.emplace_back(keycode, static_cast<uint8_t>(staged.type), staged.action);
-            }
-        }
-
-        if (!updates.empty())
-        {
-            ChangeKeyMapPacket(updates).dispatch();
-        }
-
-        for (const auto& update : updates)
-        {
-            int32_t keycode = std::get<0>(update);
-            uint8_t type = std::get<1>(update);
-            int32_t action = std::get<2>(update);
-            if (type == KeyType::NONE)
-            {
-                keyboard->remove(static_cast<uint8_t>(keycode));
-            }
-            else
-            {
-                keyboard->assign(static_cast<uint8_t>(keycode), type, action);
-            }
-        }
+        KeyBinding::apply(staged_mappings);
 
         dirty = false;
     }
@@ -631,16 +643,14 @@ namespace jrc
     {
         staged_mappings = keyboard->get_maplekeys();
         dirty = false;
-        rebuild_dynamic_icons();
-        rebuild_bound_actions();
+        icons_stale = true;
     }
 
     void UIKeyConfig::reset_to_defaults()
     {
         staged_mappings = default_basic_mappings();
         dirty = true;
-        rebuild_dynamic_icons();
-        rebuild_bound_actions();
+        icons_stale = true;
     }
 
     void UIKeyConfig::safe_close()

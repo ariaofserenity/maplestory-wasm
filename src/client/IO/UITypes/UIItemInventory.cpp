@@ -546,6 +546,16 @@ namespace jrc
         MoveItemPacket(tab, source, slot, 1).dispatch();
     }
 
+    Keyboard::Mapping UIItemInventory::ItemIcon::get_binding() const
+    {
+        // Only the two consumable tabs hold things a key can reach; equips and
+        // etc items have no use that a key press could stand for.
+        if (sourcetab != InventoryType::USE && sourcetab != InventoryType::SETUP)
+            return {};
+
+        return { KeyType::ITEM, item_id };
+    }
+
     void UIItemInventory::ItemIcon::drop_on_bindings(Point<int16_t> cursorposition, bool remove) const
     {
         if (sourcetab != InventoryType::USE && sourcetab != InventoryType::SETUP)

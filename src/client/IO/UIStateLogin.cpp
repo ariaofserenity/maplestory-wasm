@@ -75,6 +75,13 @@ namespace jrc
 
     void UIStateLogin::rightclick(Point<int16_t>) {}
 
+    bool UIStateLogin::send_raw_key(int32_t, bool)
+    {
+        // Nothing on the login screens picks a key, so every key goes on to
+        // the keymap as it always did.
+        return false;
+    }
+
     void UIStateLogin::send_key(KeyType::Id, int32_t action, bool pressed, bool escape)
     {
         if (UIElement* focusedelement = get(focused))

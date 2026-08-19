@@ -43,6 +43,7 @@ namespace jrc
         void doubleclick(Point<int16_t> pos) override;
         void rightclick(Point<int16_t> pos) override;
         void send_key(KeyType::Id type, int32_t action, bool pressed, bool escape) override;
+        bool send_raw_key(int32_t keycode, bool pressed) override;
         Cursor::State send_cursor(Cursor::State mst, Point<int16_t> pos) override;
         void send_scroll(Point<int16_t> pos, double yoffset) override;
         void send_close() override;

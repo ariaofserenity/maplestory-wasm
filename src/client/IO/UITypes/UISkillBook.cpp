@@ -57,6 +57,11 @@ namespace jrc
                 }
             }
 
+            Keyboard::Mapping get_binding() const override
+            {
+                return { KeyType::SKILL, skill_id };
+            }
+
         private:
             int32_t skill_id;
         };

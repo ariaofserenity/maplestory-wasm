@@ -21,6 +21,7 @@
 #include "../../Character/MapleStat.h"
 #include "../../IO/KeyType.h"
 
+#include <array>
 #include <tuple>
 #include <vector>
 
@@ -52,6 +53,27 @@ namespace jrc
     };
 
     // Requests the server to change key mappings.
+    // Saves which keys the quickslot on the status bar watches, and in which
+    // order. Sent whole rather than as a delta, since the server stores the
+    // eight together and rejects a body of any other length.
+    // Opcode: CHANGE_QUICKSLOT(183)
+    class ChangeQuickslotPacket : public OutPacket
+    {
+    public:
+        explicit ChangeQuickslotPacket(const std::array<int32_t, 8>& keys)
+            : OutPacket(CHANGE_QUICKSLOT)
+        {
+            for (int32_t key : keys)
+            {
+                // Widened even though no key code needs more than a byte,
+                // because the client this protocol was written for keeps them
+                // in an int array and reads them back at that width.
+                write_int(key);
+            }
+        }
+    };
+
+
     // Opcode: CHANGE_KEYMAP(135)
     class ChangeKeyMapPacket : public OutPacket
     {

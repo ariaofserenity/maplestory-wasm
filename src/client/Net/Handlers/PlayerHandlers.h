@@ -32,6 +32,15 @@ namespace jrc
     };
 
 
+    // Parses which keys the quickslot on the status bar watches, and in which
+    // order. Stored per account rather than per character, so it arrives
+    // separately from the keymap itself.
+    class QuickslotHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
+
+
     // Parses skill macros.
     class SkillMacrosHandler : public PacketHandler
     {
