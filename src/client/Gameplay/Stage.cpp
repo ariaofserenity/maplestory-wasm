@@ -223,7 +223,15 @@ namespace jrc
 
         // Drive gameplay repeats from the fixed update loop so held jump/attack
         // behave consistently even when platform key-repeat is absent or uneven.
-        if (player.is_key_down(KeyAction::JUMP))
+        //
+        // The jump repeat has to wait for the character to actually be resting on
+        // a foothold. `onground` is only recomputed at the start of the next
+        // physics step, so for one tick after take-off the character still looks
+        // grounded while already carrying the jump impulse - repeating the jump
+        // there played the jump sound a second time and re-applied the jump
+        // force. Checking the vertical speed as well closes that window.
+        const PhysicsObject& phobj = player.get_phobj();
+        if (player.is_key_down(KeyAction::JUMP) && phobj.onground && phobj.vspeed >= 0.0)
         {
             playable->send_action(KeyAction::JUMP, true);
         }
@@ -301,6 +309,12 @@ namespace jrc
         }
 
         Optional<const Ladder> ladder = mapinfo.findladder(player.get_position(), up);
+        if (ladder && !player.can_climb(*ladder))
+        {
+            // Still inside the ladder the player deliberately jumped away from.
+            return;
+        }
+
         player.set_ladder(ladder);
     }
 

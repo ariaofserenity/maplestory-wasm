@@ -19,6 +19,8 @@
 
 #include "../../Constants.h"
 
+#include <algorithm>
+
 namespace jrc
 {
     MapInfo::MapInfo(nl::node src, Range<int16_t> walls, Range<int16_t> borders)
@@ -138,11 +140,24 @@ namespace jrc
     bool Ladder::inrange(Point<int16_t> position, bool upwards) const
     {
         auto hor = Range<int16_t>::symmetric(position.x(), 10);
-        auto ver = Range<int16_t>(y1, y2);
-        int16_t y = upwards ?
-            position.y() - 5 :
-            position.y() + 5;
-        return hor.contains(x) && ver.contains(y);
+        if (!hor.contains(x))
+        {
+            return false;
+        }
+
+        if (upwards)
+        {
+            // The reference client overlaps a span reaching 20 pixels above the
+            // feet against the whole ladder rather than testing a single point,
+            // which is what makes grabbing work while walking underneath: rope
+            // bottoms usually hang some way above the platform they end at, and
+            // a point only a few pixels up never reaches them.
+            return position.y() - 20 <= y2 && y1 <= position.y();
+        }
+
+        // Climbing down is only offered while standing on top of the ladder,
+        // within the same short reach the reference client reserves for it.
+        return y1 >= position.y() && y1 <= position.y() + 10;
     }
 
     bool Ladder::felloff(int16_t y, bool downwards) const
@@ -154,5 +169,14 @@ namespace jrc
     int16_t Ladder::get_x() const
     {
         return x;
+    }
+
+    int16_t Ladder::attach_y(int16_t y) const
+    {
+        // Pull the character onto the ladder's own extent. Grabbing from the
+        // platform at the foot of a rope leaves the feet below the last rung,
+        // and leaving them there would trip felloff() on the very next tick and
+        // drop the character straight back off again.
+        return std::clamp(y, y1, y2);
     }
 }

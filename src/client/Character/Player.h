@@ -154,6 +154,12 @@ namespace jrc
         void set_seat(Optional<const Seat> seat);
         /// Change players xpos to the ladder x and change stance to Char::LADDER or Char::ROPE.
         void set_ladder(Optional<const Ladder> ladder);
+        /// Leave the current ladder and remember it, so that the climb key that
+        /// is still held while jumping away cannot re-attach to it.
+        void release_ladder();
+        /// Whether the player may attach to this ladder right now. False only for
+        /// the ladder just jumped off, until the climb key is released.
+        bool can_climb(const Ladder& candidate) const;
 
         /// Obtain a reference to the player's stats.
         CharStats& get_stats();
@@ -195,6 +201,8 @@ namespace jrc
         Randomizer randomizer;
 
         Optional<const Ladder> ladder;
+        /// The ladder the player jumped off while still holding the climb key.
+        Optional<const Ladder> releasedladder;
         bool underwater;
         bool gm_hidden = false;
     };

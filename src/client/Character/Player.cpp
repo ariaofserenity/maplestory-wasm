@@ -81,6 +81,7 @@ namespace jrc
         keysdown.clear();
         attacking = false;
         ladder = nullptr;
+        releasedladder = nullptr;
         phobj.type = PhysicsObject::NORMAL;
         phobj.clear_flags();
         phobj.hspeed = 0.0;
@@ -105,6 +106,13 @@ namespace jrc
             pst->send_action(*this, action, down);
         }
         keysdown[action] = down;
+
+        if (!down && (action == KeyAction::UP || action == KeyAction::DOWN))
+        {
+            // Letting go of the climb key ends the jump-off that blocked the
+            // ladder, so the next press is free to grab it again.
+            releasedladder = nullptr;
+        }
     }
 
     void Player::recalc_stats(bool equipchanged)
@@ -442,8 +450,17 @@ namespace jrc
         bool knockback = !missed && !immovable;
         if (knockback && randomizer.above(stats.get_stance()))
         {
+            // Knockback is an impulse, so it has to land on the speeds directly.
+            // Queueing it as a force made it depend on what the character was
+            // doing at that exact moment: the physics only consume vforce while
+            // the character is on the ground, so a hit taken in mid-air lost its
+            // vertical half entirely, and a hit that arrived on the same tick as
+            // a jump added to the jump instead of overriding it and threw the
+            // character close to twice its normal jump height.
             phobj.hspeed = fromleft ? -1.5 : 1.5;
-            phobj.vforce -= 3.5;
+            phobj.vspeed = -3.5;
+            phobj.hforce = 0.0;
+            phobj.vforce = 0.0;
         }
 
         uint8_t direction = fromleft ? 0 : 1;
@@ -460,6 +477,7 @@ namespace jrc
         keysdown.clear();
         attacking = false;
         ladder = nullptr;
+        releasedladder = nullptr;
 
         // Freeze the player immediately so no stale movement or key state leaks
         // through while waiting for the server-driven respawn.
@@ -570,6 +588,17 @@ namespace jrc
         }
     }
 
+    void Player::release_ladder()
+    {
+        releasedladder = ladder;
+        set_ladder(nullptr);
+    }
+
+    bool Player::can_climb(const Ladder& candidate) const
+    {
+        return releasedladder.get() != &candidate;
+    }
+
     void Player::set_ladder(Optional<const Ladder> ldr)
     {
         ladder = ldr;
@@ -577,6 +606,7 @@ namespace jrc
         if (ladder)
         {
             phobj.set_x(ldr->get_x());
+            phobj.set_y(ldr->attach_y(phobj.get_y()));
             phobj.hspeed  = 0.0;
             phobj.vspeed  = 0.0;
             phobj.fhlayer = 7;

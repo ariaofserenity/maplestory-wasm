@@ -24,21 +24,47 @@ namespace jrc
 {
     namespace
     {
-        bool has_horizontal_input(const Player& player)
+        // The reference client never latches a walking direction from a key
+        // event. Every tick it polls both arrow keys and works with the signed
+        // sum of the two, so releasing one of a pair of opposed keys hands
+        // control straight back to the one still held, and holding both cancels
+        // out into no horizontal intent at all.
+        int8_t horizontal_input(const Player& player)
         {
-            return player.is_key_down(KeyAction::LEFT) || player.is_key_down(KeyAction::RIGHT);
+            int8_t right = player.is_key_down(KeyAction::RIGHT) ? 1 : 0;
+            int8_t left  = player.is_key_down(KeyAction::LEFT)  ? 1 : 0;
+            return static_cast<int8_t>(right - left);
         }
 
-        bool try_jump_down(Player& player)
+        // Point the character along the polled intent. Facing follows the input
+        // rather than the key press for the same reason.
+        void face_input(Player& player, int8_t inputx)
         {
-            if (!player.get_phobj().enablejd || !player.is_key_down(KeyAction::DOWN))
+            if (inputx != 0)
             {
-                return false;
+                player.set_direction(inputx > 0);
+            }
+        }
+
+        // The stance a character on a foothold should be in for the keys that
+        // are held right now. Crouching wins over walking, matching what a down
+        // press does from stand and from walk, and it has to be re-derived on
+        // every landing so that a held key is not lost across a jump or a fall.
+        Char::State grounded_state(Player& player)
+        {
+            if (player.is_key_down(KeyAction::DOWN))
+            {
+                return Char::PRONE;
             }
 
-            player.get_phobj().y = player.get_phobj().groundbelow;
-            player.set_state(Char::FALL);
-            return true;
+            int8_t inputx = horizontal_input(player);
+            if (inputx != 0)
+            {
+                face_input(player, inputx);
+                return Char::WALK;
+            }
+
+            return Char::STAND;
         }
     }
 
@@ -54,24 +80,7 @@ namespace jrc
         Char::State state;
         if (player.get_phobj().onground)
         {
-            if (player.is_key_down(KeyAction::LEFT))
-            {
-                state = Char::WALK;
-                player.set_direction(false);
-            }
-            else if (player.is_key_down(KeyAction::RIGHT))
-            {
-                state = Char::WALK;
-                player.set_direction(true);
-            }
-            else if (player.is_key_down(KeyAction::DOWN))
-            {
-                state = Char::PRONE;
-            }
-            else
-            {
-                state = Char::STAND;
-            }
+            state = grounded_state(player);
         }
         else
         {
@@ -110,26 +119,17 @@ namespace jrc
             switch (ka)
             {
             case KeyAction::LEFT:
-                player.set_direction(false);
-                player.set_state(Char::WALK);
-                break;
             case KeyAction::RIGHT:
-                player.set_direction(true);
+                // Facing is settled by the polled input in the walk state, so
+                // the press only has to hand the character over to it.
                 player.set_state(Char::WALK);
                 break;
             case KeyAction::JUMP:
                 play_jumpsound();
-                if (!try_jump_down(player))
-                {
-                    player.get_phobj().vforce = -player.get_jumpforce();
-                }
+                player.get_phobj().vforce = -player.get_jumpforce();
                 break;
             case KeyAction::DOWN:
-                if (!has_horizontal_input(player))
-                {
-                    // Horizontal movement wins over crouch/prone when both inputs are held.
-                    player.set_state(Char::PRONE);
-                }
+                player.set_state(Char::PRONE);
                 break;
             default:
                 break;
@@ -151,9 +151,12 @@ namespace jrc
         {
             player.set_state(Char::FALL);
         }
-        else if (player.is_key_down(KeyAction::DOWN) && !has_horizontal_input(player))
+        else if (horizontal_input(player) != 0)
         {
-            player.set_state(Char::PRONE);
+            // Polled rather than driven by the key event, so that releasing one
+            // of two opposed arrow keys hands walking back to the one that is
+            // still held instead of leaving the character standing.
+            player.set_state(Char::WALK);
         }
     }
 
@@ -175,25 +178,12 @@ namespace jrc
         {
             switch (ka)
             {
-            case KeyAction::LEFT:
-                player.set_direction(false);
-                break;
-            case KeyAction::RIGHT:
-                player.set_direction(true);
-                break;
             case KeyAction::JUMP:
                 play_jumpsound();
-                if (!try_jump_down(player))
-                {
-                    player.get_phobj().vforce = -player.get_jumpforce();
-                }
+                player.get_phobj().vforce = -player.get_jumpforce();
                 break;
             case KeyAction::DOWN:
-                if (!has_horizontal_input(player))
-                {
-                    // Keep walking when a horizontal key is already held with down.
-                    player.set_state(Char::PRONE);
-                }
+                player.set_state(Char::PRONE);
                 break;
             default:
                 break;
@@ -203,16 +193,18 @@ namespace jrc
 
     bool PlayerWalkState::haswalkinput(const Player& player) const
     {
-        return has_horizontal_input(player);
+        return horizontal_input(player) != 0;
     }
 
     void PlayerWalkState::update(Player& player) const
     {
-        if (!player.is_attacking() && haswalkinput(player))
+        int8_t inputx = horizontal_input(player);
+        if (!player.is_attacking() && inputx != 0)
         {
+            face_input(player, inputx);
             player.get_phobj().hforce +=
-                player.getflip() ?  player.get_walkforce()
-                                 : -player.get_walkforce();
+                inputx > 0 ?  player.get_walkforce()
+                           : -player.get_walkforce();
         }
 
         if (!player.get_phobj().enablejd)
@@ -227,14 +219,7 @@ namespace jrc
         {
             if (!haswalkinput(player) || player.get_phobj().hspeed == 0.0f)
             {
-                if (!haswalkinput(player) && player.is_key_down(KeyAction::DOWN))
-                {
-                    player.set_state(Char::PRONE);
-                }
-                else
-                {
-                    player.set_state(Char::STAND);
-                }
+                player.set_state(Char::STAND);
             }
         }
         else
@@ -249,28 +234,18 @@ namespace jrc
         player.get_phobj().type = PhysicsObject::NORMAL;
     }
 
-    void PlayerFallState::send_action(Player& player, KeyAction::Id ka, bool down) const
+    void PlayerFallState::send_action(Player&, KeyAction::Id, bool) const
     {
-        if (down)
-        {
-            switch (ka)
-            {
-            case KeyAction::LEFT:
-                player.set_direction(false);
-                break;
-            case KeyAction::RIGHT:
-                player.set_direction(true);
-                break;
-            default:
-                break;
-            }
-        }
+        // Facing and air control both come from the polled input in update().
     }
 
     void PlayerFallState::update(Player& player) const
     {
+        int8_t inputx = horizontal_input(player);
+        face_input(player, inputx);
+
         auto& hspeed = player.get_phobj().hspeed;
-        if (player.is_key_down(KeyAction::LEFT) && hspeed > 0.0)
+        if (inputx < 0 && hspeed > 0.0)
         {
             hspeed -= 0.025;
             if (hspeed < 0.0)
@@ -278,7 +253,7 @@ namespace jrc
                 hspeed = 0.0;
             }
         }
-        else if (player.is_key_down(KeyAction::RIGHT) && hspeed < 0.0)
+        else if (inputx > 0 && hspeed < 0.0)
         {
             hspeed += 0.025;
             if (hspeed > 0.0)
@@ -292,20 +267,10 @@ namespace jrc
     {
         if (player.get_phobj().onground)
         {
-            if (player.is_key_down(KeyAction::LEFT))
-            {
-                player.set_direction(false);
-                player.set_state(Char::WALK);
-            }
-            else if (player.is_key_down(KeyAction::RIGHT))
-            {
-                player.set_direction(true);
-                player.set_state(Char::WALK);
-            }
-            else
-            {
-                player.set_state(Char::STAND);
-            }
+            // Landing keeps whatever stance the held keys ask for, so that
+            // holding down and jump drops through one platform after another
+            // instead of standing up between them.
+            player.set_state(grounded_state(player));
         }
         else if (player.is_underwater())
         {
@@ -321,18 +286,12 @@ namespace jrc
         {
             switch (ka)
             {
-            case KeyAction::LEFT:
-                player.set_direction(false);
-                player.set_state(Char::WALK);
-                break;
-            case KeyAction::RIGHT:
-                player.set_direction(true);
-                player.set_state(Char::WALK);
-                break;
             case KeyAction::JUMP:
-                if (try_jump_down(player))
+                if (player.get_phobj().enablejd && player.is_key_down(KeyAction::DOWN))
                 {
                     play_jumpsound();
+                    player.get_phobj().y = player.get_phobj().groundbelow;
+                    player.set_state(Char::FALL);
                 }
                 else
                 {
@@ -362,6 +321,18 @@ namespace jrc
         if (!player.get_phobj().enablejd)
         {
             player.get_phobj().set_flag(PhysicsObject::CHECKBELOW);
+        }
+    }
+
+    void PlayerProneState::update_state(Player& player) const
+    {
+        if (!player.get_phobj().onground)
+        {
+            // Crouching is a grounded stance. Losing the floor while prone -
+            // pressing down in the same tick the character walks off a ledge -
+            // otherwise left it stuck in the crouch for the whole fall, since
+            // nothing else moves it out of this state.
+            player.set_state(Char::FALL);
         }
     }
 
@@ -403,22 +374,9 @@ namespace jrc
                                    : PhysicsObject::FLYING;
     }
 
-    void PlayerFlyState::send_action(Player& player, KeyAction::Id ka, bool down) const
+    void PlayerFlyState::send_action(Player&, KeyAction::Id, bool) const
     {
-        if (down)
-        {
-            switch (ka)
-            {
-            case KeyAction::LEFT:
-                player.set_direction(false);
-                break;
-            case KeyAction::RIGHT:
-                player.set_direction(true);
-                break;
-            default:
-                break;
-            }
-        }
+        // Facing and thrust both come from the polled input in update().
     }
 
     void PlayerFlyState::update(Player& player) const
@@ -428,22 +386,22 @@ namespace jrc
             return;
         }
 
-        if (player.is_key_down(KeyAction::LEFT))
+        int8_t inputx = horizontal_input(player);
+        face_input(player, inputx);
+        if (inputx != 0)
         {
-            player.get_phobj().hforce = -player.get_flyforce();
-        }
-        else if (player.is_key_down(KeyAction::RIGHT))
-        {
-            player.get_phobj().hforce = player.get_flyforce();
+            player.get_phobj().hforce = inputx > 0 ?  player.get_flyforce()
+                                                   : -player.get_flyforce();
         }
 
-        if (player.is_key_down(KeyAction::UP))
+        // Vertical intent is polled the same way: down and up held together
+        // cancel instead of letting whichever was pressed first win.
+        int8_t inputy = (player.is_key_down(KeyAction::DOWN) ? 1 : 0)
+                      - (player.is_key_down(KeyAction::UP) ? 1 : 0);
+        if (inputy != 0)
         {
-            player.get_phobj().vforce = -player.get_flyforce();
-        }
-        else if (player.is_key_down(KeyAction::DOWN))
-        {
-            player.get_phobj().vforce = player.get_flyforce();
+            player.get_phobj().vforce = inputy > 0 ?  player.get_flyforce()
+                                                   : -player.get_flyforce();
         }
     }
 
@@ -451,26 +409,7 @@ namespace jrc
     {
         if (player.get_phobj().onground && player.is_underwater())
         {
-            Char::State state;
-            if (player.is_key_down(KeyAction::LEFT))
-            {
-                state = Char::WALK;
-                player.set_direction(false);
-            }
-            else if (player.is_key_down(KeyAction::RIGHT))
-            {
-                state = Char::WALK;
-                player.set_direction(true);
-            }
-            else if (player.is_key_down(KeyAction::DOWN))
-            {
-                state = Char::PRONE;
-            }
-            else
-            {
-                state = Char::STAND;
-            }
-            player.set_state(state);
+            player.set_state(grounded_state(player));
         }
     }
 
@@ -494,7 +433,7 @@ namespace jrc
                     player.set_direction(false);
                     player.get_phobj().hspeed = -player.get_walkforce() * 8.0;
                     player.get_phobj().vspeed = -player.get_jumpforce() / 1.5;
-                    cancel_ladder(player);
+                    jump_off_ladder(player);
                 }
                 else if (player.is_key_down(KeyAction::RIGHT))
                 {
@@ -502,7 +441,7 @@ namespace jrc
                     player.set_direction(true);
                     player.get_phobj().hspeed = player.get_walkforce() * 8.0;
                     player.get_phobj().vspeed = -player.get_jumpforce() / 1.5;
-                    cancel_ladder(player);
+                    jump_off_ladder(player);
                 }
                 break;
             default:
@@ -542,5 +481,16 @@ namespace jrc
     {
         player.set_state(Char::FALL);
         player.set_ladder(nullptr);
+    }
+
+    void PlayerClimbState::jump_off_ladder(Player& player) const
+    {
+        player.set_state(Char::FALL);
+        // Climbing off the end of a ladder puts the character out of its
+        // vertical range, but jumping off does not: the climb key is still held
+        // and the character is still lined up with the ladder, so the attach
+        // check would grab it again on the very next tick. Remember which ladder
+        // was left until the climb key is pressed again.
+        player.release_ladder();
     }
 }

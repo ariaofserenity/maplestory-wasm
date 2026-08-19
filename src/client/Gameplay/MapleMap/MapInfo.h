@@ -48,6 +48,8 @@ namespace jrc
         bool inrange(Point<int16_t> position, bool upwards) const;
         bool felloff(int16_t y, bool downwards) const;
         int16_t get_x() const;
+        /// Where a character attaching to this ladder belongs vertically.
+        int16_t attach_y(int16_t y) const;
 
     private:
         int16_t x;

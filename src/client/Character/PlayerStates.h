@@ -94,7 +94,7 @@ namespace jrc
         void send_action(Player& player, KeyAction::Id ka, bool down) const override;
         void update(Player&) const override;
 
-        void update_state(Player&) const override {}
+        void update_state(Player& player) const override;
     };
 
     // The sitting state.
@@ -129,5 +129,8 @@ namespace jrc
 
     private:
         void cancel_ladder(Player& player) const;
+        /// Leave the ladder on purpose, which additionally has to keep the held
+        /// climb key from re-attaching to the very same ladder.
+        void jump_off_ladder(Player& player) const;
     };
 }
