@@ -75,8 +75,8 @@ namespace jrc
     }
 
 
-    DropSpawn::DropSpawn(int32_t o, int32_t i, bool ms, int32_t ow, Point<int16_t> p, Point<int16_t> d, int8_t t, int8_t m, bool pd)
-        : oid(o), id(i), meso(ms), owner(ow), start(p), dest(d), droptype(t), mode(m), playerdrop(pd) {}
+    DropSpawn::DropSpawn(int32_t o, int32_t i, bool ms, int32_t ow, Point<int16_t> p, Point<int16_t> d, int8_t t, int8_t m, int16_t dly, bool pd)
+        : oid(o), id(i), meso(ms), owner(ow), start(p), dest(d), droptype(t), mode(m), delay(dly), playerdrop(pd) {}
 
     bool DropSpawn::is_meso() const
     {
@@ -93,14 +93,19 @@ namespace jrc
         return oid;
     }
 
+    int8_t DropSpawn::get_mode() const
+    {
+        return mode;
+    }
+
     std::unique_ptr<MapObject> DropSpawn::instantiate(const Animation& icon) const
     {
-        return std::make_unique<MesoDrop>(oid, owner, start, dest, droptype, mode, playerdrop, icon);
+        return std::make_unique<MesoDrop>(oid, owner, start, dest, droptype, mode, delay, playerdrop, icon);
     }
 
     std::unique_ptr<MapObject> DropSpawn::instantiate(const Texture& icon) const
     {
-        return std::make_unique<ItemDrop>(oid, owner, start, dest, droptype, mode, id, playerdrop, icon);
+        return std::make_unique<ItemDrop>(oid, owner, start, dest, droptype, mode, delay, id, playerdrop, icon);
     }
 
 

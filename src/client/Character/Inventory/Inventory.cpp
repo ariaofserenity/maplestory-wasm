@@ -375,6 +375,25 @@ namespace jrc
         return item_iter->second.get_expiration() >= NO_EXPIRATION;
     }
 
+    int16_t Inventory::get_item_flags(InventoryType::Id type, int16_t slot) const
+    {
+        auto slot_iter = inventories[type].find(slot);
+        if (slot_iter == inventories[type].end())
+            return 0;
+
+        int32_t unique_id = slot_iter->second.unique_id;
+
+        auto item_iter = items.find(unique_id);
+        if (item_iter != items.end())
+            return item_iter->second.get_flags();
+
+        auto equip_iter = equips.find(unique_id);
+        if (equip_iter != equips.end())
+            return equip_iter->second.get_flags();
+
+        return 0;
+    }
+
     Optional<const Equip> Inventory::get_equip(InventoryType::Id type, int16_t slot) const
     {
         if (type != InventoryType::EQUIPPED && type != InventoryType::EQUIP)

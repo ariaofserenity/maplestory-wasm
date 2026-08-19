@@ -20,15 +20,21 @@
 namespace jrc
 {
     ItemDrop::ItemDrop(int32_t oid, int32_t owner, Point<int16_t> start,
-        Point<int16_t> dest, int8_t type, int8_t mode, int32_t iid, bool pd, const Texture& icn)
-        : Drop(oid, owner, start, dest, type, mode, pd), icon(icn), itemid(iid) {}
+        Point<int16_t> dest, int8_t type, int8_t mode, int16_t delay, int32_t iid, bool pd, const Texture& icn)
+        : Drop(oid, owner, start, dest, type, mode, delay, pd), icon(icn), itemid(iid) {
+
+        // Mesos keep their own animation and never turn, so only item icons
+        // ask for the tumble.
+        enable_spin();
+    }
 
     void ItemDrop::draw(double viewx, double viewy, float alpha) const
     {
         if (!active)
             return;
 
-        Point<int16_t> absp = phobj.get_absolute(viewx, viewy, alpha);
+        Point<int16_t> absp = phobj.get_absolute(viewx, viewy, alpha)
+            + icon_offset(icon.get_origin(), icon.get_dimensions());
         icon.draw({ angle.get(alpha), absp, opacity.get(alpha) });
     }
 }

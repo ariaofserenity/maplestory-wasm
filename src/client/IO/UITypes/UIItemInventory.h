@@ -75,7 +75,7 @@ namespace jrc
         {
         public:
             ItemIcon(InventoryType::Id sourcetab, Equipslot::Id eqsource, int16_t source,
-                int32_t itemid, int16_t count, bool splittable);
+                int32_t itemid, int16_t count, bool splittable, int16_t flags);
 
             void drop_on_stage() const override;
             void drop_on_equips(Equipslot::Id eqslot) const override;
@@ -93,6 +93,8 @@ namespace jrc
             // Whether the stack can be dropped in parts. Equips, cash items,
             // rechargeables and anything that expires always go out whole.
             bool splittable;
+            // The attribute bits the server sent with this item.
+            int16_t flags;
         };
 
         enum Buttons

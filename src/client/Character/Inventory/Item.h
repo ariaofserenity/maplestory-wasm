@@ -28,6 +28,8 @@ namespace jrc
 
         // Return the item's expiration as the filetime the server sent.
         int64_t get_expiration() const;
+        // Return the attribute bits the server sent with the item.
+        int16_t get_flags() const;
 
     private:
         int32_t item_id;

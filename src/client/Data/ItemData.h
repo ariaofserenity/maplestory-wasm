@@ -42,6 +42,13 @@ namespace jrc
         const std::string& get_desc() const;
         // Return the item category (also the node name).
         const std::string& get_category() const;
+        // Whether the item is tied to a quest. Dropping one throws it away
+        // for good, so the client warns before it lets go.
+        bool is_quest_item() const;
+        // Whether the item may never change hands.
+        bool is_trade_block() const;
+        // Whether the item can only be passed around within one account.
+        bool is_account_sharable() const;
         // Returns one of the item's icons. For each item there is a 'raw' icon and an icon with a drop shadow.
         const Texture& get_icon(bool raw) const;
 
@@ -60,6 +67,9 @@ namespace jrc
         std::string desc;
         std::string category;
 
+        bool questitem;
+        bool tradeblock;
+        bool accountsharable;
         bool valid;
     };
 }

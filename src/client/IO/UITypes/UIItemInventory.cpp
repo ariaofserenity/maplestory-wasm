@@ -31,9 +31,71 @@
 #include "nlnx/nx.hpp"
 
 #include <algorithm>
+#include <string>
+#include <vector>
 
 namespace jrc
 {
+    namespace
+    {
+        // Attribute bits the server sends alongside an item. The original
+        // client reads these off the item slot to decide what dropping it
+        // costs the player.
+        constexpr int16_t FLAG_SEALED = 0x01;
+        constexpr int16_t FLAG_TRADEABLE = 0x02;
+
+        // New year cards are exempt from the trade warning.
+        constexpr int32_t NEWYEARCARD_PREFIX = 430;
+
+        constexpr auto SEALED =
+            "Sealed items cannot be\nsold, traded, or dropped.";
+        constexpr auto NO_TAKEBACK =
+            "This item can't be taken back once \nthrown away. Will you still drop it?";
+        constexpr auto NO_TRADE =
+            "Once dropped, the item cannot be traded.\nWould you still like to drop it?";
+        constexpr auto ACCOUNT_ONLY =
+            "This item cannot be recovered once dropped. However, It is possible "
+            "to transfer it to a different character on the same account by using "
+            "the storage system. \n\nDo you really want to drop this item?";
+
+        void send_drop(InventoryType::Id tab, int16_t slot, int16_t count, bool splittable)
+        {
+            if (splittable && count > 1)
+            {
+                auto onenter = [tab, slot](int32_t quantity) {
+                    MoveItemPacket(tab, slot, 0, static_cast<int16_t>(quantity)).dispatch();
+                };
+
+                UI::get().emplace<UIEnterNumber>(
+                    "How many will you drop?", onenter, 1, count, count
+                    );
+                return;
+            }
+
+            MoveItemPacket(tab, slot, 0, 1).dispatch();
+        }
+
+        // Put every warning the item earns to the player in turn, and only let
+        // go of it once all of them have been answered yes.
+        void confirm_drop(std::vector<std::string> questions, size_t index,
+            InventoryType::Id tab, int16_t slot, int16_t count, bool splittable)
+        {
+            if (index >= questions.size())
+            {
+                send_drop(tab, slot, count, splittable);
+                return;
+            }
+
+            std::string question = questions[index];
+            UI::get().emplace<UIYesNo>(question, [=](bool yes) {
+                if (yes)
+                {
+                    confirm_drop(questions, index + 1, tab, slot, count, splittable);
+                }
+            });
+        }
+    }
+
     UIItemInventory::UIItemInventory(const Inventory& invent)
         : UIDragElement<PosINV>(Point<int16_t>(172, 20)), inventory(invent) {
 
@@ -170,7 +232,8 @@ namespace jrc
             const Texture& texture = ItemData::get(item_id).get_icon(false);
             Equipslot::Id eqslot = inventory.find_equipslot(item_id);
             icons[slot] = std::make_unique<Icon>(
-                std::make_unique<ItemIcon>(tab, eqslot, slot, item_id, count, is_splittable(slot)),
+                std::make_unique<ItemIcon>(tab, eqslot, slot, item_id, count,
+                    is_splittable(slot), inventory.get_item_flags(tab, slot)),
                 texture,
                 count
                 );
@@ -582,7 +645,7 @@ namespace jrc
 
 
     UIItemInventory::ItemIcon::ItemIcon(InventoryType::Id st, Equipslot::Id eqs, int16_t s,
-        int32_t id, int16_t c, bool sp) {
+        int32_t id, int16_t c, bool sp, int16_t fl) {
 
         sourcetab = st;
         eqsource = eqs;
@@ -590,6 +653,7 @@ namespace jrc
         item_id = id;
         count = c;
         splittable = sp;
+        flags = fl;
     }
 
     void UIItemInventory::ItemIcon::set_count(int16_t c)
@@ -599,21 +663,31 @@ namespace jrc
 
     void UIItemInventory::ItemIcon::drop_on_stage() const
     {
-        if (splittable && count > 1)
+        // A sealed item cannot leave the inventory at all.
+        if (flags & FLAG_SEALED)
         {
-            InventoryType::Id tab = sourcetab;
-            int16_t slot = source;
-            auto onenter = [tab, slot](int32_t quantity) {
-                MoveItemPacket(tab, slot, 0, static_cast<int16_t>(quantity)).dispatch();
-            };
-
-            UI::get().emplace<UIEnterNumber>(
-                "How many will you drop?", onenter, 1, count, count
-                );
+            UI::get().emplace<UIOk>(SEALED, []() {});
             return;
         }
 
-        MoveItemPacket(sourcetab, source, 0, 1).dispatch();
+        const ItemData& data = ItemData::get(item_id);
+        bool tradeable = (flags & FLAG_TRADEABLE) != 0;
+
+        std::vector<std::string> questions;
+        if (data.is_quest_item() && !tradeable)
+        {
+            questions.emplace_back(NO_TAKEBACK);
+        }
+        if (data.is_trade_block() && item_id / 10000 != NEWYEARCARD_PREFIX)
+        {
+            questions.emplace_back(tradeable ? NO_TRADE : NO_TAKEBACK);
+        }
+        if (data.is_account_sharable())
+        {
+            questions.emplace_back(ACCOUNT_ONLY);
+        }
+
+        confirm_drop(std::move(questions), 0, sourcetab, source, count, splittable);
     }
 
     void UIItemInventory::ItemIcon::drop_on_equips(Equipslot::Id eqslot) const

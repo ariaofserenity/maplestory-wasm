@@ -64,9 +64,10 @@ namespace jrc
             const DropSpawn& spawn = spawns.front();
 
             int32_t oid = spawn.get_oid();
-            if (Optional<MapObject> drop = drops.get(oid))
+            if (Optional<Drop> drop = drops.get(oid))
             {
                 drop->makeactive();
+                drop->promote(spawn.get_mode());
             }
             else
             {
@@ -91,6 +92,7 @@ namespace jrc
             mesoicon.update();
         }
 
+        Drop::tick_sound_cooldown();
         drops.update(physics);
 
         lootenabled = true;
@@ -116,8 +118,15 @@ namespace jrc
 
     void MapDrops::try_pickup(int32_t oid, const Drop& drop, Point<int16_t> playerpos, int32_t& closest_distance_sq, Loot& closest_loot) const
     {
+        // A drop still in the air is not on the map yet as far as the server
+        // is concerned, and neither is one it only animated for show.
+        if (!drop.can_be_looted())
+        {
+            return;
+        }
+
         Point<int16_t> position = drop.get_position();
-        Point<int16_t> center = position + Point<int16_t>(16, 16);
+        Point<int16_t> center = position + Point<int16_t>(0, 16);
 
         int32_t dx = static_cast<int32_t>(center.x()) - playerpos.x();
         int32_t dy = static_cast<int32_t>(center.y()) - playerpos.y();

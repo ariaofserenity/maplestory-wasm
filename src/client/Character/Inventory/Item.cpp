@@ -26,4 +26,9 @@ namespace jrc
     {
         return expiration;
     }
+
+    int16_t Item::get_flags() const
+    {
+        return flags;
+    }
 }

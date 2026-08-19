@@ -66,6 +66,10 @@ namespace jrc
             icons[true] = src["iconRaw"];
             price = src["price"];
 
+            questitem = src["quest"].get_bool();
+            tradeblock = src["tradeBlock"].get_bool();
+            accountsharable = src["accountSharable"].get_bool();
+
             name = strsrc["name"].get_string();
             desc = strsrc["desc"].get_string();
 
@@ -73,8 +77,26 @@ namespace jrc
         }
         else
         {
+            questitem = false;
+            tradeblock = false;
+            accountsharable = false;
             valid = false;
         }
+    }
+
+    bool ItemData::is_quest_item() const
+    {
+        return questitem;
+    }
+
+    bool ItemData::is_trade_block() const
+    {
+        return tradeblock;
+    }
+
+    bool ItemData::is_account_sharable() const
+    {
+        return accountsharable;
     }
 
     std::string ItemData::get_eqcategory(int32_t id) const

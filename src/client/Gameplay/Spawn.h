@@ -106,11 +106,13 @@ namespace jrc
                   Point<int16_t> destination,
                   int8_t droptype,
                   int8_t mode,
+                  int16_t delay,
                   bool playerdrop);
 
         bool is_meso() const;
         int32_t get_itemid() const;
         int32_t get_oid() const;
+        int8_t get_mode() const;
         std::unique_ptr<MapObject> instantiate(const Animation& icon) const;
         std::unique_ptr<MapObject> instantiate(const Texture& icon) const;
 
@@ -123,6 +125,9 @@ namespace jrc
         Point<int16_t> dest;
         int8_t droptype;
         int8_t mode;
+        // How long the server wants the drop to wait before it starts moving,
+        // so it lines up with the death animation of whatever dropped it.
+        int16_t delay;
         bool playerdrop;
     };
 

@@ -26,7 +26,7 @@ namespace jrc
     {
     public:
         ItemDrop(int32_t oid, int32_t owner, Point<int16_t> start, Point<int16_t> dest,
-            int8_t type, int8_t mode, int32_t iid, bool playerdrop, const Texture& icon);
+            int8_t type, int8_t mode, int16_t delay, int32_t iid, bool playerdrop, const Texture& icon);
 
         void draw(double viewx, double viewy, float alpha) const override;
 

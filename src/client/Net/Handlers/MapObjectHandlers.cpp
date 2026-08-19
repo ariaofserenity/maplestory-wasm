@@ -505,11 +505,14 @@ namespace jrc
         recv.skip(4);
 
         Point<int16_t> dropfrom;
+        int16_t delay = 0;
         if (mode != 2)
         {
             dropfrom = recv.read_point();
 
-            recv.skip(2);
+            // The drop holds still for this long before it starts moving, so
+            // that it appears to leave the mob as the death animation plays.
+            delay = recv.read_short();
         }
         else
         {
@@ -523,7 +526,7 @@ namespace jrc
         bool playerdrop = !recv.read_bool();
 
         Stage::get().get_drops().spawn({
-            oid, itemid, meso, owner, dropfrom, dropto, pickuptype, mode, playerdrop
+            oid, itemid, meso, owner, dropfrom, dropto, pickuptype, mode, delay, playerdrop
         });
     }
 

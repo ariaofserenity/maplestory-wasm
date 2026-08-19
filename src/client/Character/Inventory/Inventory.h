@@ -110,6 +110,8 @@ namespace jrc
         // Return whether the item in a slot never expires. Slots holding an
         // equip, a pet or nothing at all count as permanent.
         bool is_permanent(InventoryType::Id type, int16_t slot) const;
+        // Return the per-item attribute bits the server sent for a slot.
+        int16_t get_item_flags(InventoryType::Id type, int16_t slot) const;
 
         // Return a pointer to an equip.
         Optional<const Equip> get_equip(InventoryType::Id type, int16_t slot) const;
