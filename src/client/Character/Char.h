@@ -93,6 +93,8 @@ namespace jrc
         void show_iron_body();
         /// Display damage over the characters head.
         void show_damage(int32_t damage);
+        /// Show hp being gained, in the blue numbers the client reserves for it.
+        void show_recovery(int32_t amount);
         /// Display a chat bubble with the specified line in it.
         void speak(const std::string& line);
         /// Update overhead party hp information for this character.
@@ -131,6 +133,9 @@ namespace jrc
         bool is_sitting() const;
         /// Return if the char is in the Char::LADDER or Char::ROPE state.
         bool is_climbing() const;
+        /// Return if the char is holding still, which is what natural hp
+        /// recovery waits for.
+        bool is_standing() const;
         /// Return wether the character sprite uses stances for two-handed weapons.
         bool is_twohanded() const;
         /// Return the type of the currently equipped weapon.

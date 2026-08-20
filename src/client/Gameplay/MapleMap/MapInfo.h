@@ -69,6 +69,10 @@ namespace jrc
         std::string get_bgm() const;
         Range<int16_t> get_walls() const;
         Range<int16_t> get_borders() const;
+        // How fast the field restores hp and mp, as a multiplier on the flat
+        // amount a regeneration tick hands out. Inns and saunas raise it; every
+        // ordinary map leaves the property out and recovers at the plain rate.
+        float get_recovery() const;
 
         // Find a setat the player's position.
         Optional<const Seat> findseat(Point<int16_t> position) const;
@@ -85,6 +89,9 @@ namespace jrc
         std::string mapmark;
         bool swim;
         bool town;
+        // Defaulted so a stage that has not loaded a map yet cannot scale a
+        // recovery tick by garbage.
+        float recovery = 1.0f;
         bool hideminimap;
         Range<int16_t> mapwalls;
         Range<int16_t> mapborders;

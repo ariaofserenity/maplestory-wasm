@@ -17,6 +17,7 @@
 //////////////////////////////////////////////////////////////////////////////
 #pragma once
 #include "Camera.h"
+#include "Recovery.h"
 #include "Spawn.h"
 
 #include "Combat/Combat.h"
@@ -148,6 +149,7 @@ namespace jrc
         MapEffect effect;
 
         Combat combat;
+        Recovery recovery;
         int32_t pending_intro_warp_mapid;
         int32_t pending_intro_warp_delay_ms;
         int32_t charinfo_cooldown_ms;

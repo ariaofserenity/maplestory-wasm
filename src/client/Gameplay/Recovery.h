@@ -16,53 +16,35 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.    //
 //////////////////////////////////////////////////////////////////////////////
 #pragma once
-#include "../Physics/PhysicsObject.h"
-#include "../../IO/Components/Charset.h"
-#include "../../Template/BoolPair.h"
-#include "../../Template/Interpolated.h"
-#include "../../Template/Point.h"
+#include "../Character/Player.h"
+
+#include <cstdint>
 
 namespace jrc
 {
-    class DamageNumber
+    // The hp and mp a character gets back for doing nothing, ported from
+    // CWvsContext::TryRecovery.
+    //
+    // The server schedules none of this. It only bounds what arrives and hands
+    // the result back as a stat update, so regeneration exists exactly as long
+    // as the client keeps asking for it - which is why two swordman skills that
+    // ride on this tick, Improved HP Recovery and Endure, live here too.
+    class Recovery
     {
     public:
-        static const size_t NUM_TYPES = 4;
-        enum Type
-        {
-            NORMAL,
-            CRITICAL,
-            TOPLAYER,
-            // Hp gained rather than lost. The client draws these in blue, and
-            // uses them for the natural regeneration tick as well as for heals.
-            RECOVERY
-        };
-
-        DamageNumber(Type type, int32_t damage, int16_t starty, int16_t x = 0);
-        DamageNumber();
-
-        void draw(double viewx, double viewy, float alpha) const;
-        void set_x(int16_t headx);
-        bool update();
-
-        static int16_t rowheight(bool critical);
-        static void init();
+        // Advance both timers by one frame and report a tick if one came due.
+        void update(Player& player, float maprate);
+        // Drop accumulated progress, e.g. when changing maps.
+        void reset();
 
     private:
-        int16_t getadvance(char c, bool first) const;
+        // How long hp has to wait, or 0 while the character is in a stance that
+        // does not recover at all.
+        int32_t hp_interval(const Player& player) const;
+        // The hp one tick is worth, skill included.
+        int32_t hp_amount(const Player& player, double rate) const;
 
-        static constexpr uint16_t FADE_TIME = 500;
-
-        Type type;
-        bool miss;
-        bool multiple;
-        int8_t firstnum;
-        std::string restnum;
-        int16_t shift;
-        MovingObject moveobj;
-        Linear<float> opacity;
-
-        static BoolPair<Charset> charsets[NUM_TYPES];
+        int32_t hp_elapsed = 0;
+        int32_t mp_elapsed = 0;
     };
 }
-

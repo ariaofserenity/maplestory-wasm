@@ -51,6 +51,7 @@ namespace jrc
         mapmark = info["mapMark"].get_string();
         swim = info["swim"].get_bool();
         town = info["town"].get_bool();
+        recovery = static_cast<float>(info["recovery"].get_real(1.0));
 
         for (auto seat : src["seat"])
         {
@@ -83,6 +84,11 @@ namespace jrc
     Range<int16_t> MapInfo::get_borders() const
     {
         return mapborders;
+    }
+
+    float MapInfo::get_recovery() const
+    {
+        return recovery;
     }
 
     Optional<const Seat> MapInfo::findseat(Point<int16_t> position) const

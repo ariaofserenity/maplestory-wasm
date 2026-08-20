@@ -100,6 +100,10 @@ namespace jrc
         int32_t matk      = 0;
         int32_t mobid     = 0;
         int32_t oid       = 0;
+        // The attacker's level. Defence is worth less against a monster the
+        // character has out-levelled, so the reduction cannot be worked out
+        // without it.
+        int32_t level     = 0;
         Point<int16_t> origin;
         bool valid = false;
 
@@ -107,9 +111,10 @@ namespace jrc
         MobAttack(int32_t watk,
                   Point<int16_t> origin,
                   int32_t mobid,
-                  int32_t oid)
+                  int32_t oid,
+                  int32_t level)
             : type(Attack::CLOSE), watk(watk), mobid(mobid), oid(oid),
-              origin(origin),      valid(true)
+              level(level),        origin(origin), valid(true)
             {}
 
         MobAttack()

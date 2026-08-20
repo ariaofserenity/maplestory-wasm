@@ -190,6 +190,8 @@ namespace jrc
         charsets[CRITICAL].set(true, nl::nx::effect["BasicEff.img"]["NoCri0"], Charset::LEFT);
         charsets[TOPLAYER].set(false, nl::nx::effect["BasicEff.img"]["NoViolet1"], Charset::LEFT);
         charsets[TOPLAYER].set(true, nl::nx::effect["BasicEff.img"]["NoViolet0"], Charset::LEFT);
+        charsets[RECOVERY].set(false, nl::nx::effect["BasicEff.img"]["NoBlue1"], Charset::LEFT);
+        charsets[RECOVERY].set(true, nl::nx::effect["BasicEff.img"]["NoBlue0"], Charset::LEFT);
     }
 
     BoolPair<Charset> DamageNumber::charsets[NUM_TYPES];

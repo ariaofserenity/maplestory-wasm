@@ -87,6 +87,7 @@ namespace jrc
         pending_intro_warp_delay_ms = 0;
 
         combat.clear();
+        recovery.reset();
         chars.clear();
         npcs.clear();
         mobs.clear();
@@ -182,6 +183,9 @@ namespace jrc
         // and before the player, whose position it trails.
         summons.update(physics, player, mobs, combat);
         player.update(physics);
+        // After the player, so the stance a recovery tick is judged against is
+        // the one this frame ended on.
+        recovery.update(player, mapinfo.get_recovery());
         if (is_intro_input_locked())
         {
             // Direction3-style intro scenes present the actor facing left and

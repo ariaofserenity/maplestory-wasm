@@ -68,7 +68,9 @@ namespace jrc
         ignoredef = 0.0f;
         stance = 0.0f;
         resiststatus = 0.0f;
-        reducedamage = 0.0f;
+        // A fraction of incoming damage rather than a discount off it, so the
+        // neutral value is the whole of it.
+        reducedamage = 1.0f;
     }
 
     void CharStats::close_totalstats()
@@ -276,11 +278,42 @@ namespace jrc
         job.change_job(id);
     }
 
-    int32_t CharStats::calculate_damage(int32_t mobatk) const
+    int32_t CharStats::calculate_damage(int32_t mobatk, int32_t moblevel) const
     {
-        // random stuff, need to find the actual formula somewhere
-        int32_t reduceatk = mobatk / 2 + mobatk / get_total(Equipstat::WDEF);
-        return reduceatk - static_cast<int32_t>(reduceatk * reducedamage);
+        // Weapon defence buys two separate reductions, both off a quarter of
+        // it: a flat subtraction, and a percentage that grows as its square
+        // root, so the first points of defence are worth far more than the
+        // last. Whichever of the two leaves the character better off wins.
+        double quarter = get_total(Equipstat::WDEF) * 0.25;
+        auto flatdef = static_cast<int32_t>(quarter + 0.5);
+        auto pctdef = static_cast<int32_t>(std::sqrt(quarter));
+
+        // Being under-levelled eats into both, four points of the flat
+        // reduction and two of the percentage per level of the gap. Out-
+        // levelling a monster is worth nothing extra.
+        if (level_gap_against(moblevel) > 0)
+        {
+            int32_t gap = level_gap_against(moblevel);
+            flatdef -= std::min(gap * 4, flatdef);
+            pctdef -= std::min(gap * 2, pctdef);
+        }
+
+        double damage = std::min(
+            mobatk * (100 - pctdef) / 100.0,
+            static_cast<double>(mobatk - flatdef)
+        );
+
+        // Achilles and friends scale what is left; the stat holds the fraction
+        // that still lands, so an untouched character keeps all of it.
+        damage *= reducedamage;
+
+        // A hit always registers, however well defended.
+        return std::max(1, static_cast<int32_t>(damage));
+    }
+
+    int32_t CharStats::level_gap_against(int32_t moblevel) const
+    {
+        return moblevel - static_cast<int32_t>(get_stat(Maplestat::LEVEL));
     }
 
     bool CharStats::is_damage_buffed() const

@@ -442,7 +442,7 @@ namespace jrc
 
     MobAttackResult Player::damage(const MobAttack& attack)
     {
-        int32_t damage = stats.calculate_damage(attack.watk);
+        int32_t damage = stats.calculate_damage(attack.watk, attack.level);
         show_damage(damage);
 
         bool fromleft = attack.origin.x() > phobj.get_x();

@@ -58,7 +58,9 @@ namespace jrc
 
         void change_job(uint16_t id);
 
-        int32_t calculate_damage(int32_t mobatk) const;
+        // Work out what a hit of mobatk from a monster of moblevel leaves
+        // after this character's weapon defence.
+        int32_t calculate_damage(int32_t mobatk, int32_t moblevel) const;
 
         bool is_damage_buffed() const;
         uint16_t get_stat(Maplestat::Id stat) const;
@@ -92,6 +94,10 @@ namespace jrc
         const Job& get_job() const;
 
     private:
+        // How many levels the given monster has on this character, negative
+        // when the character is ahead.
+        int32_t level_gap_against(int32_t moblevel) const;
+
         int32_t calculateaccuracy() const;
         // How much of its maximum this weapon deals with no mastery skill.
         float unmastered_floor() const;

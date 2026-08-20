@@ -114,6 +114,7 @@ namespace jrc
 
         // Player
         SPEND_AP = 87,
+        HEAL_OVER_TIME = 89,
         SPEND_SP = 90,
         GIVE_FAME = 95,
         CHAR_INFO_REQUEST = 97,

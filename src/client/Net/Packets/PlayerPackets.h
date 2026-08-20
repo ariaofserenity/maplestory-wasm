@@ -52,6 +52,28 @@ namespace jrc
         }
     };
 
+    // Reports one tick of the natural hp/mp regeneration the client runs for
+    // itself. The server schedules no regeneration of its own - it only checks
+    // the amount is plausible and applies it - so standing still restores
+    // nothing unless this is sent.
+    // Opcode: HEAL_OVER_TIME(89)
+    class HealOverTimePacket : public OutPacket
+    {
+    public:
+        HealOverTimePacket(int16_t hp, int16_t mp, int8_t flag)
+            : OutPacket(HEAL_OVER_TIME)
+        {
+            write_time();
+            // A constant the server skips over along with the timestamp.
+            write_int(0x1400);
+            write_short(hp);
+            write_short(mp);
+            // Non-zero while sitting, which is what lets the larger amount a
+            // chair grants past the server's ceiling.
+            write_byte(flag);
+        }
+    };
+
     // Requests the server to change key mappings.
     // Saves which keys the quickslot on the status bar watches, and in which
     // order. Sent whole rather than as a delta, since the server stores the

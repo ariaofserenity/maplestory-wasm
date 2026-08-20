@@ -841,10 +841,13 @@ namespace jrc
             return {};
         }
 
-        auto minattack = static_cast<int32_t>(watk * 0.8f);
+        // A hit rolls uniformly over the top 15% of the monster's attack, which
+        // is the spread calc_mob_base_damamge draws from before defence is
+        // taken off it.
+        auto minattack = static_cast<int32_t>(watk * 0.85f);
         int32_t maxattack = watk;
         int32_t attack = randomizer.next_int(minattack, maxattack);
-        return { attack, get_position(), id, oid };
+        return { attack, get_position(), id, oid, level };
     }
 
     void Mob::apply_death()
