@@ -109,6 +109,8 @@ namespace jrc
         void cancel_buff(Buffstat::Id stat);
         /// Return wether the buff is active.
         bool has_buff(Buffstat::Id stat) const;
+        /// Return the skill a buff came from, or zero if the stat is unbuffed.
+        int32_t get_buff_skillid(Buffstat::Id stat) const;
 
         /// Change a skill.
         void change_skill(int32_t skill_id, int32_t level, int32_t masterlevel, int64_t expiration);
@@ -193,6 +195,14 @@ namespace jrc
         Monsterbook& get_monsterbook();
 
     private:
+        // Whether the skill spends combo orbs rather than building them.
+        static bool is_finisher(int32_t skill_id);
+        // Fold in Shield Mastery, which raises what the equipped shield is
+        // worth rather than the character's total defence and so needs the item
+        // itself - something PassiveBuffs, which only ever sees stats, cannot
+        // reach.
+        void apply_shield_mastery();
+
         CharStats stats;
         Inventory inventory;
         Skillbook skillbook;

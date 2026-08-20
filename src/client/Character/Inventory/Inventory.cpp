@@ -224,6 +224,24 @@ namespace jrc
         return slotmaxima[type];
     }
 
+    uint16_t Inventory::get_equipped_stat(Equipslot::Id slot, Equipstat::Id type) const
+    {
+        auto& equipped = inventories[InventoryType::EQUIPPED];
+        auto slot_iter = equipped.find(static_cast<int16_t>(slot));
+        if (slot_iter == equipped.end())
+        {
+            return 0;
+        }
+
+        auto equip_iter = equips.find(slot_iter->second.unique_id);
+        if (equip_iter == equips.end())
+        {
+            return 0;
+        }
+
+        return equip_iter->second.get_stat(type);
+    }
+
     uint16_t Inventory::get_stat(Equipstat::Id type) const
     {
         return totalstats[type];

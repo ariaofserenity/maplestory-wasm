@@ -54,18 +54,25 @@ namespace jrc
             // Crusader
             IMPROVED_MP_RECOVERY_CRUSADER = 1110000,
             SHIELD_MASTERY = 1110001,
+            COMBO_ATTACK = 1111002,
             SWORD_PANIC = 1111003,
             AXE_PANIC = 1111004,
             SWORD_COMA = 1111005,
             AXE_COMA = 1111006,
+            ARMOR_CRASH = 1111007,
             SHOUT = 1111008,
 
             // Hero
             ADVANCED_COMBO_ATTACK = 1120003,
             ACHILLES_HERO = 1120004,
             GUARDIAN_HERO = 1120005,
+            MAPLE_WARRIOR_HERO = 1121000,
+            MONSTER_MAGNET_HERO = 1121001,
+            POWER_STANCE_HERO = 1121002,
             RUSH_HERO = 1121006,
             BRANDISH = 1121008,
+            ENRAGE = 1121010,
+            HEROS_WILL_HERO = 1121011,
 
             // Page
             SWORD_MASTERY_PAGE = 1200000,

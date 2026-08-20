@@ -448,6 +448,21 @@ namespace jrc
     }
 
 
+    void DamageMonsterHandler::handle(InPacket& recv) const
+    {
+        int32_t oid = recv.read_int();
+        recv.read_byte();
+        int32_t damage = recv.read_int();
+        // The current and maximum hp trail the damage, but the server sends a
+        // pair of zeroes for a bounce, so the monster's bar is left alone.
+
+        if (damage > 0)
+        {
+            Stage::get().get_combat().show_bounce_damage(oid, damage);
+        }
+    }
+
+
     void SpawnNpcHandler::handle(InPacket& recv) const
     {
         int32_t oid = recv.read_int();

@@ -28,6 +28,7 @@
 #include "../../Util/Randomizer.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace jrc
 {
@@ -527,8 +528,14 @@ namespace jrc
             return;
 
         // A final attack's whole level data is its chance and its damage; prop
-        // is how often the swing sets it off.
-        if (!randomizer.below(SkillData::get(skillid).get_stats(level).chance))
+        // is how often the swing sets it off. TryRegisterFinalAttack rolls it
+        // over 101 values and lets a tie through, so a level lands a shade more
+        // often than the flat percentage its tooltip quotes - 3 in 101 at level
+        // one rather than 2 in 100, which is half again as often down there.
+        auto prop = static_cast<int32_t>(
+            std::lround(SkillData::get(skillid).get_stats(level).chance * 100)
+        );
+        if (randomizer.next_int(101) > prop)
             return;
 
         finalattack_skill = skillid;
@@ -1363,6 +1370,13 @@ namespace jrc
                 area.lifetime, int8_t{ 0 }, int16_t{ 0 }, flip, true
             );
         }
+    }
+
+    void Combat::show_bounce_damage(int32_t oid, int32_t damage)
+    {
+        Point<int16_t> body = mobs.get_mob_body_position(oid);
+        damagenumbers.emplace_back(DamageNumber::NORMAL, damage, body.y());
+        damagenumbers.back().set_x(body.x());
     }
 
     std::vector<DamageNumber> Combat::place_numbers(int32_t oid, const std::vector<std::pair<int32_t, bool>>& damagelines)

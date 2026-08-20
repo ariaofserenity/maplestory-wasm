@@ -11,6 +11,8 @@
 #include "../Graphics/Geometry.h"
 #include "../IO/Components/ChatBalloon.h"
 #include "../Template/EnumMap.h"
+
+#include <vector>
 #include "../Template/Rectangle.h"
 #include "../Util/TimedBool.h"
 
@@ -95,6 +97,8 @@ namespace jrc
         void show_damage(int32_t damage);
         /// Show hp being gained, in the blue numbers the client reserves for it.
         void show_recovery(int32_t amount);
+        /// Set how many combo orbs hang over the character. Zero draws none.
+        void set_combo_orbs(int32_t orbs);
         /// Display a chat bubble with the specified line in it.
         void speak(const std::string& line);
         /// Update overhead party hp information for this character.
@@ -174,11 +178,25 @@ namespace jrc
         Afterimage afterimage;
         TimedBool invincible;
         TimedBool ironbody;
+        // Combo Attack's buff value, which counts from one on a fresh cast, so
+        // the number of orbs banked is one less than this.
+        int32_t comboorbs = 0;
+        // How far round their orbit the orbs have travelled, in radians.
+        float comboangle = 0.0f;
+        // How far the ring in the middle has turned on the spot, in radians.
+        float comboringangle = 0.0f;
         std::list<DamageNumber> damagenumbers;
         PartyHpBar partyhpbar;
         int32_t partyhp;
         int32_t partymaxhp;
 
         static EnumMap<CharEffect::Id, Animation> chareffects;
+        // One sprite per orb count, from Combo Attack's own "state" node. Index
+        // zero is the marker a fresh cast shows before the first hit lands.
+        // Held as plain textures rather than animations: each node carries the
+        // fade-and-shrink an animation would start from - a0 64, z0 300 - so an
+        // Animation sits at quarter opacity and triple size until something
+        // drives it, which is not what a standing orb should look like.
+        static std::vector<Texture> comboorbsprites;
     };
 }

@@ -1,5 +1,7 @@
 #include "Char.h"
 
+#include <cmath>
+
 #include <algorithm>
 #include <math.h>
 
@@ -12,6 +14,32 @@
 
 namespace jrc
 {
+    namespace
+    {
+        // Combo Attack's orbs. ShowSkillEffect hands the character's own vector
+        // controller to Effect_SkillUse as the parent, so the ring is centred
+        // on the character rather than hung over their head - it wraps the
+        // body, which is why this sits at roughly mid-height rather than up
+        // with the name tag and the chat balloon.
+        constexpr int16_t COMBO_ORB_HEIGHT = 33;
+        // The orbit itself. The original leaves each orb to a COM layer that
+        // spins under its own Rotate, with no per-frame routine in the binary
+        // to copy, so the span and the pace are chosen rather than lifted - but
+        // the size is not free. state/0, the ring that sits on the character,
+        // is 72x73 about a centred origin, so it reaches 36 pixels out; an orb
+        // is 42x42 about its own centre, so it reaches 21. Anything under 57
+        // has the orbs clipping the ring, which is what a radius of 36 was
+        // doing. These clear it with a little room to spare, barely flattened,
+        // so the ring keeps the middle to itself.
+        constexpr float COMBO_ORB_RX = 56.0f;
+        constexpr float COMBO_ORB_RY = 50.0f;
+        constexpr float COMBO_ORB_PERIOD = 1800.0f;
+        // The ring turns on the spot rather than travelling, so it gets a pace of
+        // its own - slower than the orbits, so the two read as separate motions.
+        constexpr float COMBO_RING_PERIOD = 2400.0f;
+        constexpr float COMBO_PI = 3.14159265f;
+    }
+
     Char::Char(int32_t o, const CharLook& lk, const std::string& name)
         : LivingObject(o, { false, true, true }),
           look(lk),
@@ -72,6 +100,35 @@ namespace jrc
 
         effects.drawabove(absp, alpha);
 
+        if (comboorbs > 0 && !comboorbsprites.empty())
+        {
+            // The buff counts from one, so a value of one is the combo running
+            // with nothing banked - that shows the ring alone, and each orb
+            // after it takes the next sprite along.
+            auto orbs = static_cast<size_t>(comboorbs) - 1;
+
+            // Centred on the character, the way the parent vector puts it.
+            Point<int16_t> centre = absp - Point<int16_t>(
+                0, COMBO_ORB_HEIGHT
+            );
+
+            comboorbsprites[0].draw({ comboringangle, centre, false, 1.0f });
+
+            size_t shown = std::min(orbs, comboorbsprites.size() - 1);
+            for (size_t i = 0; i < shown; i++)
+            {
+                // Spread evenly round the orbit and carried along by the shared
+                // angle, so they hold their spacing as they turn.
+                float step = static_cast<float>(2.0 * COMBO_PI * i / shown);
+                float theta = comboangle + step;
+
+                auto ox = static_cast<int16_t>(COMBO_ORB_RX * std::cos(theta));
+                auto oy = static_cast<int16_t>(COMBO_ORB_RY * std::sin(theta));
+
+                comboorbsprites[i + 1].draw({ centre + Point<int16_t>(ox, oy) });
+            }
+        }
+
         for (auto& number : damagenumbers)
         {
             number.draw(viewx, viewy, alpha);
@@ -87,6 +144,25 @@ namespace jrc
         chatballoon.update();
         invincible.update();
         ironbody.update();
+
+        if (comboorbs > 0)
+        {
+            constexpr float TWO_PI = static_cast<float>(2.0 * COMBO_PI);
+            constexpr float TURN = TWO_PI * Constants::TIMESTEP / COMBO_ORB_PERIOD;
+            constexpr float SPIN = TWO_PI * Constants::TIMESTEP / COMBO_RING_PERIOD;
+
+            comboangle += TURN;
+            if (comboangle > TWO_PI)
+            {
+                comboangle -= TWO_PI;
+            }
+
+            comboringangle += SPIN;
+            if (comboringangle > TWO_PI)
+            {
+                comboringangle -= TWO_PI;
+            }
+        }
 
         for (auto& pet : pets)
         {
@@ -191,6 +267,11 @@ namespace jrc
         effects.add(
             chareffects[toshow]
         );
+    }
+
+    void Char::set_combo_orbs(int32_t orbs)
+    {
+        comboorbs = orbs;
     }
 
     void Char::show_iron_body()
@@ -449,7 +530,16 @@ namespace jrc
         {
             chareffects.emplace(iter.first, src.resolve(iter.second));
         }
+
+        // Combo Attack keeps its orb art with the skill rather than in
+        // BasicEff, one numbered child per count the buff can reach.
+        nl::node combosrc = nl::nx::skill["111.img"]["skill"]["1111002"]["state"];
+        for (nl::node frame : combosrc)
+        {
+            comboorbsprites.emplace_back(frame);
+        }
     }
 
     EnumMap<CharEffect::Id, Animation> Char::chareffects;
+    std::vector<Texture> Char::comboorbsprites;
 }

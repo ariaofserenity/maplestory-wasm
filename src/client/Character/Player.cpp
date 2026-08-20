@@ -24,6 +24,11 @@
 #include "../IO/UITypes/UIStatsInfo.h"
 #include "../Net/Packets/GameplayPackets.h"
 #include "../Net/Packets/InventoryPackets.h"
+#include "../Util/Misc.h"
+#include "SkillId.h"
+
+#include "nlnx/nx.hpp"
+#include "nlnx/node.hpp"
 
 namespace jrc
 {
@@ -142,6 +147,8 @@ namespace jrc
             passive_buffs.apply_buff(stats, skill_id, skill_level);
         }
 
+        apply_shield_mastery();
+
         for (const Buff& buff : buffs.values())
         {
             active_buffs.apply_buff(stats, buff.stat, buff.value);
@@ -153,6 +160,57 @@ namespace jrc
         {
             statsinfo->update_all_stats();
         }
+    }
+
+    bool Player::is_finisher(int32_t skill_id)
+    {
+        switch (skill_id)
+        {
+        case SkillId::SWORD_PANIC:
+        case SkillId::AXE_PANIC:
+        case SkillId::SWORD_COMA:
+        case SkillId::AXE_COMA:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    void Player::apply_shield_mastery()
+    {
+        int32_t level = skillbook.get_level(SkillId::SHIELD_MASTERY);
+        if (level <= 0)
+        {
+            return;
+        }
+
+        // Nothing to raise with an empty off hand, which the skill says in as
+        // many words.
+        uint16_t shield_wdef = inventory.get_equipped_stat(
+            Equipslot::SHIELD, Equipstat::WDEF
+        );
+        if (shield_wdef == 0)
+        {
+            return;
+        }
+
+        // The wz stores the shield's defence as a percentage of itself - 105 at
+        // level one for the "5% increased" the tooltip quotes, 200 at twenty -
+        // so what it adds is the part above the whole.
+        std::string strid = string_format::extend_id(SkillId::SHIELD_MASTERY, 7);
+        nl::node src = nl::nx::skill[strid.substr(0, 3) + ".img"]["skill"][strid]
+            ["level"][level];
+
+        auto percent = static_cast<int32_t>(src["x"]);
+        if (percent <= 100)
+        {
+            return;
+        }
+
+        stats.add_value(
+            Equipstat::WDEF,
+            shield_wdef * (percent - 100) / 100
+        );
     }
 
     void Player::change_equip(int16_t slot)
@@ -325,6 +383,14 @@ namespace jrc
         if (has_cooldown(move.get_id()))
         {
             return SpecialMove::FBR_COOLDOWN;
+        }
+
+        // A finisher spends combo orbs, so it needs at least one banked. The
+        // buff's value counts from one on a fresh cast, meaning a value of one
+        // is the combo running with nothing saved up yet.
+        if (is_finisher(move.get_id()) && buffs[Buffstat::COMBO].value <= 1)
+        {
+            return SpecialMove::FBR_OTHER;
         }
 
         int32_t level       = skillbook.get_level(move.get_id());
@@ -515,16 +581,34 @@ namespace jrc
     void Player::give_buff(Buff buff)
     {
         buffs[buff.stat] = buff;
+
+        // Combo Attack carries its orb count as the buff's value, and the
+        // server resends the whole buff on every change, so the orbs follow it
+        // rather than being counted here.
+        if (buff.stat == Buffstat::COMBO)
+        {
+            set_combo_orbs(buff.value);
+        }
     }
 
     void Player::cancel_buff(Buffstat::Id stat)
     {
         buffs[stat] = {};
+
+        if (stat == Buffstat::COMBO)
+        {
+            set_combo_orbs(0);
+        }
     }
 
     bool Player::has_buff(Buffstat::Id stat) const
     {
         return buffs[stat].value > 0;
+    }
+
+    int32_t Player::get_buff_skillid(Buffstat::Id stat) const
+    {
+        return buffs[stat].skillid;
     }
 
     void Player::change_skill(int32_t skill_id, int32_t skill_level,

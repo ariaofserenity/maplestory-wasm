@@ -64,6 +64,9 @@ namespace jrc
         void show_buff(int32_t cid, int32_t skillid, int8_t level);
         // Show a buff effect.
         void show_player_buff(int32_t skillid);
+        // Put a damage number over a monster that was hurt by something other
+        // than a swing, such as a hit Power Guard bounced back at it.
+        void show_bounce_damage(int32_t oid, int32_t damage);
 
     private:
         struct DamageEffect

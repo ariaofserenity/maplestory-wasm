@@ -116,6 +116,16 @@ namespace jrc
     };
 
 
+    // Damage dealt to a monster by something other than a swing - Power Guard
+    // and Mana Reflection bouncing a hit back, a mob hurting itself. Carries no
+    // attacker, so it only puts a number over the monster.
+    // Opcode: DAMAGE_MONSTER(246)
+    class DamageMonsterHandler : public PacketHandler
+    {
+        void handle(InPacket& recv) const override;
+    };
+
+
     // Spawn an npc on the current stage.
     // Opcode: SPAWN_NPC(257)
     class SpawnNpcHandler : public PacketHandler

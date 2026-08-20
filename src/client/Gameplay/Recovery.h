@@ -43,6 +43,8 @@ namespace jrc
         int32_t hp_interval(const Player& player) const;
         // The hp one tick is worth, skill included.
         int32_t hp_amount(const Player& player, double rate) const;
+        // The mp one tick is worth, skill included.
+        int32_t mp_amount(const Player& player, double rate) const;
 
         int32_t hp_elapsed = 0;
         int32_t mp_elapsed = 0;

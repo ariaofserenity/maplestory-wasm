@@ -22,6 +22,7 @@
 
 #include "../../Constants.h"
 #include "../../Graphics/Texture.h"
+#include "../../Template/Rectangle.h"
 
 #include <unordered_map>
 
@@ -34,6 +35,14 @@ namespace jrc
 
         void draw(Point<int16_t> position, float alpha) const;
         bool update();
+        // Restart the countdown. Recasting a buff replaces the server's timer
+        // rather than stacking with it, so the icon has to follow suit instead
+        // of running the old one down and vanishing under a live buff.
+        void refresh(int32_t dur);
+        // The box the icon covers when drawn at the given anchor, taken from
+        // the texture rather than assumed, since the anchor is its bottom left.
+        Rectangle<int16_t> bounds(Point<int16_t> position) const;
+        int32_t get_id() const;
 
     private:
         static const uint16_t FLASH_TIME = 3'000;
@@ -60,10 +69,18 @@ namespace jrc
         void update() override;
         void update_screen(int16_t new_width, int16_t new_height) override;
         CursorResult send_cursor(bool pressed, Point<int16_t> position) override;
+        bool is_in_range(Point<int16_t> cursorpos) const override;
+        // Right-clicking an icon asks the server to drop that buff.
+        void rightclick(Point<int16_t> cursorpos) override;
 
         void add_buff(int32_t buffid, int32_t duration);
+        // Drop an icon once the server confirms the buff is gone.
+        void remove_buff(int32_t buffid);
 
     private:
+        // The icon drawn under the cursor, or null when none is.
+        const BuffIcon* icon_at(Point<int16_t> cursorpos) const;
+
         std::unordered_map<int32_t, BuffIcon> icons;
     };
 }

@@ -258,7 +258,19 @@ namespace jrc
 
     void CancelBuffHandler::handle_buff(InPacket&, Buffstat::Id bs) const
     {
-        Stage::get().get_player().cancel_buff(bs);
+        Player& player = Stage::get().get_player();
+
+        // Read the source before dropping the stat, which clears it. Nothing
+        // else removes the icon, so without this it lingered on screen until
+        // its own countdown ran out well after the buff had gone.
+        int32_t skillid = player.get_buff_skillid(bs);
+        player.cancel_buff(bs);
+
+        if (skillid != 0)
+        {
+            if (auto bufflist = UI::get().get_element<UIBuffList>())
+                bufflist->remove_buff(skillid);
+        }
     }
 
 

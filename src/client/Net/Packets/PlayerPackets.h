@@ -74,6 +74,19 @@ namespace jrc
         }
     };
 
+    // Asks the server to drop a buff early, which is what right-clicking its
+    // icon does. The server decides whether it goes, and answers with the
+    // ordinary cancel packet either way.
+    // Opcode: CANCEL_BUFF(92)
+    class CancelBuffPacket : public OutPacket
+    {
+    public:
+        explicit CancelBuffPacket(int32_t skillid) : OutPacket(CANCEL_BUFF)
+        {
+            write_int(skillid);
+        }
+    };
+
     // Requests the server to change key mappings.
     // Saves which keys the quickslot on the status bar watches, and in which
     // order. Sent whole rather than as a delta, since the server stores the

@@ -98,7 +98,7 @@ namespace jrc
             if (mp_elapsed >= TICK)
             {
                 mp_elapsed = 0;
-                mp = static_cast<int32_t>(rate * MP_PER_TICK);
+                mp = mp_amount(player, rate);
             }
         }
         else
@@ -171,6 +171,37 @@ namespace jrc
         {
             amount += static_cast<int32_t>(
                 skill_level(SkillId::IMPROVED_HP_RECOVERY, level)["hp"]
+            );
+        }
+
+        return amount;
+    }
+
+    int32_t Recovery::mp_amount(const Player& player, double rate) const
+    {
+        int32_t amount = static_cast<int32_t>(rate * MP_PER_TICK);
+
+        // Improving MP Recovery is the crusader's half of the same bargain and
+        // reads the same way against a base of three, so it is folded in on the
+        // same terms - and with the same caveat, that TryRecovery itself reads
+        // no skill level and this comes from the wz rather than from the
+        // binary. Its wz is not a straight line: two per level to ten, then one
+        // per level to thirty at twenty, which is why the value is read rather
+        // than worked out.
+        // Unlike hp, the base mp tick is not gated on holding still - it comes
+        // back while walking. The skill is, though: its tooltip promises the
+        // extra "by standing still", the same wording Improved HP Recovery
+        // uses, so only the bonus waits on the stance.
+        if (!player.is_standing() && !player.is_sitting())
+        {
+            return amount;
+        }
+
+        int32_t level = player.get_skilllevel(SkillId::IMPROVED_MP_RECOVERY_CRUSADER);
+        if (level > 0)
+        {
+            amount += static_cast<int32_t>(
+                skill_level(SkillId::IMPROVED_MP_RECOVERY_CRUSADER, level)["mp"]
             );
         }
 

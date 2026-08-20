@@ -92,6 +92,10 @@ namespace jrc
         uint8_t get_slotmax(InventoryType::Id type) const;
         // Return a total stat.
         uint16_t get_stat(Equipstat::Id type) const;
+        // One equipped item's own contribution to a stat, rather than the total
+        // across everything worn. Shield Mastery raises what the shield itself
+        // is worth, so it has to be told apart from the rest of the gear.
+        uint16_t get_equipped_stat(Equipslot::Id slot, Equipstat::Id type) const;
         // Return the amount of meso.
         int64_t get_meso() const;
         // Find a free slot for the specified equip.

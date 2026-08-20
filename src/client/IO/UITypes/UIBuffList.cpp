@@ -19,6 +19,7 @@
 
 #include "../../Data/ItemData.h"
 #include "../../Util/Misc.h"
+#include "../../Net/Packets/PlayerPackets.h"
 
 #include "nlnx/nx.hpp"
 #include "nlnx/node.hpp"
@@ -50,6 +51,28 @@ namespace jrc
     {
         icon.draw({ position, opacity.get(alpha) });
         cover.draw(position + Point<int16_t>(1, -31), alpha);
+    }
+
+    void BuffIcon::refresh(int32_t dur)
+    {
+        duration = dur;
+        cover = IconCover(IconCover::BUFF, dur - FLASH_TIME);
+        opacity.set(1.0f);
+        opcstep = -0.05f;
+    }
+
+    Rectangle<int16_t> BuffIcon::bounds(Point<int16_t> position) const
+    {
+        // draw() hands the anchor straight to the texture, which offsets it by
+        // its own origin - the bottom left for an icon - so the box sits above
+        // the anchor rather than below it.
+        Point<int16_t> topleft = position - icon.get_origin();
+        return { topleft, topleft + icon.get_dimensions() };
+    }
+
+    int32_t BuffIcon::get_id() const
+    {
+        return buffid;
     }
 
     bool BuffIcon::update()
@@ -117,12 +140,71 @@ namespace jrc
         return UIElement::send_cursor(pressed, cursorposition);
     }
 
+    bool UIBuffList::is_in_range(Point<int16_t> cursorpos) const
+    {
+        // The base check covers one icon's worth of space at the anchor, while
+        // the row grows leftwards from it, so everything but the newest buff
+        // sat outside the element and never saw the click.
+        return icon_at(cursorpos) != nullptr;
+    }
+
+    const BuffIcon* UIBuffList::icon_at(Point<int16_t> cursorpos) const
+    {
+        Point<int16_t> icpos = position;
+        for (auto& icon : icons)
+        {
+            if (icon.second.bounds(icpos).contains(cursorpos))
+            {
+                return &icon.second;
+            }
+            icpos.shift_x(-32);
+        }
+        return nullptr;
+    }
+
+    void UIBuffList::rightclick(Point<int16_t> cursorpos)
+    {
+        const BuffIcon* icon = icon_at(cursorpos);
+        if (!icon)
+        {
+            return;
+        }
+
+        // Item buffs are keyed by the negative of the item's id, and the server
+        // reads this as a skill id and looks it up unconditionally, so sending
+        // one would fault it. Only a skill can be dropped this way.
+        int32_t buffid = icon->get_id();
+        if (buffid <= 0)
+        {
+            return;
+        }
+
+        // The icon stays until the server answers with the cancel, so a buff it
+        // declines to drop keeps both its effect and its icon.
+        CancelBuffPacket(buffid).dispatch();
+    }
+
     void UIBuffList::add_buff(int32_t buffid, int32_t duration)
     {
+        // emplace keeps the entry already there, which for a recast meant the
+        // icon kept counting the old cast down and disappeared while the buff
+        // itself was still running on the refreshed timer.
+        auto iter = icons.find(buffid);
+        if (iter != icons.end())
+        {
+            iter->second.refresh(duration);
+            return;
+        }
+
         icons.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(buffid),
             std::forward_as_tuple(buffid, duration)
         );
+    }
+
+    void UIBuffList::remove_buff(int32_t buffid)
+    {
+        icons.erase(buffid);
     }
 }
